@@ -1,11 +1,9 @@
-import React, { useState, useEffect, memo, useMemo, useRef } from 'react';
+import React, { useState, useEffect, memo, useMemo, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   ScrollView,
-  Image,
-  ImageBackground, // Added ImageBackground
   TouchableOpacity,
   TextInput,
   Dimensions,
@@ -13,11 +11,17 @@ import {
   StatusBar,
   FlatList,
   Platform,
-  Animated
+  Animated,
+  Alert,
+  RefreshControl
 } from 'react-native';
+import { Image } from 'expo-image'; // Replacing standard RN Image
+import * as ImagePicker from 'expo-image-picker'; // Added Image Picker
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme'; 
 import { router } from 'expo-router';
+import { useGetEcomerceProductQuery } from '@/Features/api/EcomerceSlice';
+import { uri } from '@/Features/api/Uri';
 
 const { width } = Dimensions.get('window');
 
@@ -64,32 +68,11 @@ const CountdownTimer = memo(({ theme, styles }) => {
   );
 });
 
-// --- UPDATED Mock Data for Banner (Real Life Images) ---
+// --- Mock Data ---
 const HERO_BANNERS = [
-  { 
-    id: 'h1', 
-    title: 'Season Finale', 
-    subtitle: '50% OFF Tools', 
-    bg: '#0EA5E9', 
-    btnText: 'Shop Now',
-    image: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80' 
-  },
-  { 
-    id: 'h2', 
-    title: 'Tech Week', 
-    subtitle: 'New Gadgets', 
-    bg: '#8B5CF6', 
-    btnText: 'Discover',
-    image: 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=800&q=80' 
-  },
-  { 
-    id: 'h3', 
-    title: 'Auto Parts', 
-    subtitle: 'Upgrade Your Ride', 
-    bg: '#F59E0B', 
-    btnText: 'Explore',
-    image: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=800&q=80' 
-  }
+  { id: 'h1', title: 'Season Finale', subtitle: '50% OFF Tools', bg: '#0EA5E9', btnText: 'Shop Now', image: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80' },
+  { id: 'h2', title: 'Tech Week', subtitle: 'New Gadgets', bg: '#8B5CF6', btnText: 'Discover', image: 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=800&q=80' },
+  { id: 'h3', title: 'Auto Parts', subtitle: 'Upgrade Your Ride', bg: '#F59E0B', btnText: 'Explore', image: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=800&q=80' }
 ];
 
 const CATEGORIES = [
@@ -112,12 +95,6 @@ const DAILY_DROPS = [
   { id: 'd2', name: 'Cyber Shoes X', brand: 'Nike Branch', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400', stock: 'Dropping soon' },
 ];
 
-const BEST_SALES = [
-  { id: 's1', name: 'MacBook M3 Pro', brand: 'Apple Store', discount: '25%', image: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400' },
-  { id: 's2', name: 'OLED TV 65"', brand: 'LG Electronics', discount: '40%', image: 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=400' },
-  { id: 's3', name: 'Smart Watch 9', brand: 'Samsung HQ', discount: '15%', image: 'https://images.unsplash.com/photo-1544117518-30df578096a4?w=400' },
-];
-
 const RECOMMENDED = [
   { id: '1', name: 'Industrial Gear Set', brand: 'YS Industrial', price: '85,000', rating: '4.8', image: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400' },
   { id: '2', name: 'Premium Espresso', brand: 'BrewMaster', price: '35,000', rating: '4.9', image: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400' },
@@ -126,15 +103,81 @@ const RECOMMENDED = [
 ];
 
 export default function YSStoreProApp() {
+  const { data, isLoading, isSuccess, isError, refetch } = useGetEcomerceProductQuery('', {
+    pollingInterval: 1000,
+    refetchOnFocus: true,
+  });
+  
+  const [Products, SetProducts] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchImageUri, setSearchImageUri] = useState(null);
+
+  useEffect(() => {
+    if (!data?.data) return;
+    SetProducts(data?.data);
+  }, [data]);
+  
   const colorScheme = useColorScheme();
   const theme = useMemo(() => getThemeColors(colorScheme), [colorScheme]);
   const styles = useMemo(() => getStyles(theme), [theme]);
-
   const [followedIds, setFollowedIds] = useState([]);
   const [activeBanner, setActiveBanner] = useState(0);
-  
+
   const bannerRef = useRef(null);
   const scrollX = useRef(new Animated.Value(0)).current;
+
+  // --- Pull to Refresh Logic ---
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
+  // --- Visual Search (Image Picker/Camera) Logic ---
+  const handleVisualSearch = () => {
+    Alert.alert(
+      "Visual Search",
+      "Find products using a photo",
+      [
+        { text: "Take a Photo", onPress: openCamera },
+        { text: "Upload from Gallery", onPress: openGallery },
+        { text: "Cancel", style: "cancel" }
+      ]
+    );
+  };
+
+  const openCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Camera access is required to take photos.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setSearchImageUri(result.assets[0].uri);
+      // TODO: Handle image upload to your backend here
+      console.log("Searching with image:", result.assets[0].uri);
+    }
+  };
+
+  const openGallery = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setSearchImageUri(result.assets[0].uri);
+      // TODO: Handle image upload to your backend here
+    }
+  };
+
+  const clearSearchImage = () => setSearchImageUri(null);
 
   const toggleFollow = (id) => {
     setFollowedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -161,29 +204,46 @@ export default function YSStoreProApp() {
 
   const followedShopsData = SHOPS.filter(shop => followedIds.includes(shop.id));
 
-  const renderProduct = ({ item }) => (
-    <TouchableOpacity style={styles.gridProductCard} onPress={() => router.push('(PDP)/PDP')}>
-      <Image source={{ uri: item.image }} style={styles.gridImg} />
-      <View style={styles.gridInfo}>
-        <View style={styles.brandRow}>
-          <Ionicons name="storefront" size={10} color={theme.textSub} />
-          <Text style={styles.companyName} numberOfLines={1}>{item.brand}</Text>
-        </View>
-        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.itemPrice}>₦{item.price}</Text>
+  const renderProduct = ({ item }) => {
+    const random = Math.floor(Math.random() * 5) + 1;
+    const imageUrl = item.img && item.img[0] ? `${uri}/img/${item.img[0]}` : item.image;
 
-        <View style={styles.cardFooter}>
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={12} color="#F59E0B" />
-            <Text style={styles.ratingText}>{item.rating}</Text>
+    return (
+      <TouchableOpacity style={styles.gridProductCard} onPress={() => router.push('(PDP)/PDP')}>
+        {/* Replaced standard Image with expo-image */}
+        <Image 
+          source={{ uri: imageUrl }} 
+          style={styles.gridImg} 
+          contentFit="cover" 
+          transition={300} // Smooth fade in
+        />
+        <View style={styles.gridInfo}>
+          <View style={styles.brandRow}>
+            <Ionicons name="storefront" size={10} color={theme.textSub} />
+            <Text style={styles?.companyName} numberOfLines={1}>{item?.sourceName}</Text>
           </View>
-          <TouchableOpacity style={styles.gridAddBtn}>
-            <Ionicons name="add" size={18} color="white" />
-          </TouchableOpacity>
+          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.itemPrice}>{Number(item?.soldAtPrice || item?.price).toLocaleString()}</Text>
+
+          <View style={styles.cardFooter}>
+            <View style={styles.ratingRow}>
+              {Array.from({length: random}).map((_, i) => (
+                <Ionicons key={i} name="star" size={12} color="#F59E0B" />
+              ))}
+              <Text style={styles.ratingText}>{item?.rating || random}</Text>
+            </View>
+            <TouchableOpacity style={styles.gridAddBtn}>
+              <Ionicons name="add" size={18} color="white" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
+
+  const filteredBestSellers = useMemo(() => {
+    return Products.filter(res => res.isBestSeller === true);
+  }, [Products]);
 
   const HeaderComponent = () => (
     <>
@@ -203,39 +263,24 @@ export default function YSStoreProApp() {
           scrollEventThrottle={16}
           keyExtractor={item => item.id}
           renderItem={({ item, index }) => {
-            const inputRange = [
-              (index - 1) * width,
-              index * width,
-              (index + 1) * width,
-            ];
-            const scale = scrollX.interpolate({
-              inputRange,
-              outputRange: [0.9, 1, 0.9],
-              extrapolate: 'clamp',
-            });
-            const opacity = scrollX.interpolate({
-              inputRange,
-              outputRange: [0.6, 1, 0.6],
-              extrapolate: 'clamp',
-            });
+            const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+            const scale = scrollX.interpolate({ inputRange, outputRange: [0.9, 1, 0.9], extrapolate: 'clamp' });
+            const opacity = scrollX.interpolate({ inputRange, outputRange: [0.6, 1, 0.6], extrapolate: 'clamp' });
 
             return (
               <View style={styles.heroBannerWrapper}>
                 <Animated.View style={[styles.heroBanner, { transform: [{ scale }], opacity }]}>
-                  {/* Image Background encompassing the whole card */}
-                  <ImageBackground 
-                    source={{ uri: item.image }} 
-                    style={styles.bannerImageBg}
-                    imageStyle={{ borderRadius: 24 }}
-                    resizeMode="cover"
-                  >
-                    {/* Dark Overlay to make text readable */}
+                  {/* Replaced ImageBackground with an absolute expo-image + wrapper View */}
+                  <View style={styles.bannerImageBg}>
+                    <Image 
+                      source={{ uri: item.image }} 
+                      style={[StyleSheet.absoluteFill, { borderRadius: 24 }]} 
+                      contentFit="cover"
+                      transition={500}
+                    />
                     <View style={styles.imageOverlay}>
-                        {/* Decorative Circles */}
                         <View style={[styles.decorativeCircle, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
                         <View style={[styles.decorativeCircleSmall, { backgroundColor: 'rgba(255,255,255,0.1)' }]} />
-                        
-                        {/* Content Layout */}
                         <View style={styles.bannerContent}>
                             <View style={styles.textColumn}>
                                 <View style={styles.newBadge}>
@@ -250,34 +295,19 @@ export default function YSStoreProApp() {
                             </View>
                         </View>
                     </View>
-                  </ImageBackground>
+                  </View>
                 </Animated.View>
               </View>
             );
           }}
         />
-        
         <View style={styles.paginationDots}>
           {HERO_BANNERS.map((_, i) => {
             const inputRange = [(i - 1) * width, i * width, (i + 1) * width];
-            
-            const dotWidth = scrollX.interpolate({
-              inputRange,
-              outputRange: [8, 20, 8],
-              extrapolate: 'clamp',
-            });
-            
-            const dotOpacity = scrollX.interpolate({
-              inputRange,
-              outputRange: [0.3, 1, 0.3],
-              extrapolate: 'clamp',
-            });
-
+            const dotWidth = scrollX.interpolate({ inputRange, outputRange: [8, 20, 8], extrapolate: 'clamp' });
+            const dotOpacity = scrollX.interpolate({ inputRange, outputRange: [0.3, 1, 0.3], extrapolate: 'clamp' });
             return (
-              <Animated.View 
-                key={i} 
-                style={[styles.dot, { width: dotWidth, opacity: dotOpacity, backgroundColor: theme.textMain }]} 
-              />
+              <Animated.View key={i} style={[styles.dot, { width: dotWidth, opacity: dotOpacity, backgroundColor: theme.textMain }]} />
             );
           })}
         </View>
@@ -306,11 +336,10 @@ export default function YSStoreProApp() {
             {followedShopsData.map((shop) => (
               <TouchableOpacity key={shop.id} style={styles.followedCircleCard}>
                 <View>
-                  <Image source={{ uri: shop.image }} style={styles.followedAvatar} />
+                  {/* Converted to expo-image */}
+                  <Image source={{ uri: shop.image }} style={styles.followedAvatar} contentFit="cover" />
                   {shop.isLive ? (
-                    <View style={styles.liveBadge}>
-                      <Text style={styles.liveText}>LIVE</Text>
-                    </View>
+                    <View style={styles.liveBadge}><Text style={styles.liveText}>LIVE</Text></View>
                   ) : (
                     <View style={styles.onlineDot} />
                   )}
@@ -329,7 +358,8 @@ export default function YSStoreProApp() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalList}>
         {SHOPS.map((shop) => (
           <View key={shop.id} style={styles.shopCard}>
-            <Image source={{ uri: shop.image }} style={styles.shopAvatar} />
+             {/* Converted to expo-image */}
+            <Image source={{ uri: shop.image }} style={styles.shopAvatar} contentFit="cover" transition={200} />
             <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
             <TouchableOpacity
               onPress={() => toggleFollow(shop.id)}
@@ -352,7 +382,8 @@ export default function YSStoreProApp() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalList}>
         {DAILY_DROPS.map((drop) => (
           <View key={drop.id} style={styles.dropCard}>
-            <Image source={{ uri: drop.image }} style={styles.dropImg} />
+            {/* Converted to expo-image */}
+            <Image source={{ uri: drop.image }} style={styles.dropImg} contentFit="cover" transition={200} />
             <View style={styles.dropContent}>
               <View style={styles.brandRow}>
                 <Ionicons name="business" size={12} color={theme.skyBlue} />
@@ -375,15 +406,13 @@ export default function YSStoreProApp() {
         <TouchableOpacity><Text style={styles.seeAll}>See All</Text></TouchableOpacity>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalList}>
-        {BEST_SALES.map((sale) => (
-          <TouchableOpacity key={sale.id} style={styles.saleCard}>
-            <View style={styles.discountBadge}>
-              <Text style={styles.discountText}>{sale.discount} OFF</Text>
-            </View>
-            <Image source={{ uri: sale.image }} style={styles.saleImg} />
+        {filteredBestSellers.map((sale) => (
+          <TouchableOpacity key={sale?._id} style={styles.saleCard}>
+             {/* Converted to expo-image */}
+            <Image source={{ uri: `${uri}/img/${sale.img[0]}` }} style={styles.saleImg} contentFit="cover" transition={300} />
             <View style={styles.saleInfo}>
-              <Text style={styles.companyName} numberOfLines={1}>{sale.brand}</Text>
-              <Text style={styles.saleTitle} numberOfLines={1}>{sale.name}</Text>
+              <Text style={styles.companyName} numberOfLines={1}>{sale?.sourceName}</Text>
+              <Text style={styles.saleTitle} numberOfLines={1}>{sale?.name}</Text>
             </View>
           </TouchableOpacity>
         ))}
@@ -417,31 +446,57 @@ export default function YSStoreProApp() {
             </View>
           </View>
         </View>
+        
+        {/* Updated Search Bar with Visual Search capability */}
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={20} color={theme.textSub} style={{ marginRight: 10 }} />
-          <TextInput
-            placeholder="Search products, brands, shops..."
-            placeholderTextColor={theme.textSub}
-            style={styles.searchInput}
-          />
+          {searchImageUri ? (
+            <View style={styles.imageSearchPill}>
+              <Image source={{ uri: searchImageUri }} style={styles.imageSearchThumbnail} />
+              <Text style={styles.imageSearchText}>Visual Search Active</Text>
+              <TouchableOpacity onPress={clearSearchImage} style={styles.clearSearchImgBtn}>
+                <Ionicons name="close-circle" size={16} color={theme.textSub} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TextInput
+              placeholder="Search products, brands, shops..."
+              placeholderTextColor={theme.textSub}
+              style={styles.searchInput}
+            />
+          )}
+          {/* Camera/Upload Icon */}
+          {!searchImageUri && (
+            <TouchableOpacity onPress={handleVisualSearch} style={styles.cameraBtn}>
+              <Ionicons name="camera-outline" size={20} color={theme.skyBlue} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       <FlatList
-        data={RECOMMENDED}
+        data={Products?.length > 0 ? Products : RECOMMENDED}
         renderItem={renderProduct}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item?._id || item?.id}
         numColumns={2}
         ListHeaderComponent={HeaderComponent}
         contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={ // Added Pull to Refresh
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={theme.skyBlue}
+            colors={[theme.skyBlue, theme.red]}
+          />
+        }
       />
     </SafeAreaView>
   );
 }
 
 const getStyles = (theme) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.bg },
+  container: { flex: 1, backgroundColor: theme.bg, paddingTop: Platform.OS === "android" ? "7%" : 0 },
   row: { flexDirection: 'row', alignItems: 'center' },
 
   header: {
@@ -461,68 +516,36 @@ const getStyles = (theme) => StyleSheet.create({
     alignItems: 'center', paddingHorizontal: 15, height: 48,
   },
   searchInput: { flex: 1, fontSize: 14, color: theme.textMain, fontWeight: '500' },
+  cameraBtn: { padding: 5 },
+  imageSearchPill: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: theme.border, borderRadius: 20, padding: 4, paddingRight: 8 },
+  imageSearchThumbnail: { width: 28, height: 28, borderRadius: 14, marginRight: 8 },
+  imageSearchText: { flex: 1, fontSize: 12, color: theme.textMain, fontWeight: '600' },
+  clearSearchImgBtn: { padding: 4 },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 15 },
   sectionTitle: { fontSize: 19, fontWeight: '800', color: theme.textMain },
   seeAll: { color: theme.skyBlue, fontWeight: '700', fontSize: 13 },
   horizontalList: { paddingLeft: 16, marginBottom: 25 },
 
-  carouselContainer: { 
-    marginTop: 20, 
-    marginBottom: 20,
-  },
-  heroBannerWrapper: {
-    width: width, 
-    alignItems: 'center', 
-    justifyContent: 'center'
-  },
+  carouselContainer: { marginTop: 20, marginBottom: 20 },
+  heroBannerWrapper: { width: width, alignItems: 'center', justifyContent: 'center' },
   heroBanner: { 
-    width: width - 32, 
-    height: 180,
-    borderRadius: 24, 
-    overflow: 'hidden', 
-    elevation: 8, 
-    shadowColor: '#000', 
-    shadowOpacity: 0.3, 
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 }
+    width: width - 32, height: 180, borderRadius: 24, overflow: 'hidden', 
+    elevation: 8, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }
   },
-  bannerImageBg: {
-    width: '100%',
-    height: '100%',
-  },
-  imageOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)', // Semi-transparent overlay for text readability
-    padding: 20,
-    justifyContent: 'center',
-  },
-  decorativeCircle: {
-      position: 'absolute', top: -30, right: -30, width: 140, height: 140, borderRadius: 70
-  },
-  decorativeCircleSmall: {
-      position: 'absolute', bottom: -20, left: -20, width: 80, height: 80, borderRadius: 40
-  },
-  bannerContent: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1
-  },
+  bannerImageBg: { width: '100%', height: '100%' },
+  imageOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', padding: 20, justifyContent: 'center' },
+  decorativeCircle: { position: 'absolute', top: -30, right: -30, width: 140, height: 140, borderRadius: 70 },
+  decorativeCircleSmall: { position: 'absolute', bottom: -20, left: -20, width: 80, height: 80, borderRadius: 40 },
+  bannerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1 },
   textColumn: { flex: 1, justifyContent: 'center', zIndex: 1 },
-  newBadge: {
-      backgroundColor: theme.red, paddingHorizontal: 8, paddingVertical: 4,
-      borderRadius: 8, alignSelf: 'flex-start', marginBottom: 8
-  },
+  newBadge: { backgroundColor: theme.red, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start', marginBottom: 8 },
   newBadgeText: { color: 'white', fontSize: 10, fontWeight: '800' },
   heroTitle: { color: 'white', fontSize: 26, fontWeight: '900', marginBottom: 4 },
   heroSubtitle: { color: 'rgba(255,255,255,0.95)', fontSize: 15, fontWeight: '600', marginBottom: 14 },
-  shopNowBtn: { 
-      backgroundColor: 'white', paddingHorizontal: 16, paddingVertical: 10, 
-      borderRadius: 30, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center' 
-  },
+  shopNowBtn: { backgroundColor: 'white', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 30, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center' },
   shopNowText: { color: '#0F172A', fontWeight: 'bold', fontSize: 12 },
-  paginationDots: { 
-      position: 'absolute', bottom: -15, width: '100%', flexDirection: 'row', justifyContent: 'center',
-      alignItems: 'center', height: 10 
-  },
+  paginationDots: { position: 'absolute', bottom: -15, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', height: 10 },
   dot: { height: 8, borderRadius: 4, marginHorizontal: 4 },
 
   catScroll: { paddingLeft: 16, marginBottom: 25 },
@@ -530,21 +553,15 @@ const getStyles = (theme) => StyleSheet.create({
   catIconBox: { width: 60, height: 60, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   catText: { color: theme.textSub, fontWeight: '700', fontSize: 12 },
 
+  followedContainer: { marginTop: 10 },
   followedCircleCard: { marginRight: 18, alignItems: 'center' },
   followedAvatar: { width: 65, height: 65, borderRadius: 32.5, borderWidth: 2, borderColor: theme.skyBlue },
   onlineDot: { position: 'absolute', right: 2, bottom: 2, width: 14, height: 14, borderRadius: 7, backgroundColor: '#22C55E', borderWidth: 2, borderColor: theme.card },
-  liveBadge: { 
-    position: 'absolute', bottom: -5, alignSelf: 'center', backgroundColor: theme.red, 
-    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1.5, borderColor: theme.card 
-  },
+  liveBadge: { position: 'absolute', bottom: -5, alignSelf: 'center', backgroundColor: theme.red, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1.5, borderColor: theme.card },
   liveText: { color: 'white', fontSize: 9, fontWeight: '900' },
   followedName: { fontSize: 12, fontWeight: '700', marginTop: 8, color: theme.textMain },
 
-  shopCard: { 
-    width: 120, backgroundColor: theme.card, borderRadius: 20, 
-    padding: 14, marginRight: 15, alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4,
-    borderWidth: 1, borderColor: theme.border
-  },
+  shopCard: { width: 120, backgroundColor: theme.card, borderRadius: 20, padding: 14, marginRight: 15, alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, borderWidth: 1, borderColor: theme.border },
   shopAvatar: { width: 54, height: 54, borderRadius: 27, marginBottom: 10 },
   shopName: { fontWeight: '800', fontSize: 13, color: theme.textMain, marginBottom: 10 },
   followBtn: { backgroundColor: theme.followBg, paddingVertical: 8, borderRadius: 10, width: '100%', alignItems: 'center' },
@@ -554,11 +571,7 @@ const getStyles = (theme) => StyleSheet.create({
   timerBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, marginLeft: 10 },
   timerText: { color: 'white', fontWeight: 'bold', fontSize: 12, marginLeft: 4, fontVariant: ['tabular-nums'] },
 
-  dropCard: { 
-    width: 280, backgroundColor: theme.card, borderRadius: 24, marginRight: 16, 
-    overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 5,
-    borderWidth: 1, borderColor: theme.border
-  },
+  dropCard: { width: 280, backgroundColor: theme.card, borderRadius: 24, marginRight: 16, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 5, borderWidth: 1, borderColor: theme.border },
   dropImg: { width: '100%', height: 140, backgroundColor: theme.bg },
   dropContent: { padding: 15 },
   dropBrand: { fontSize: 11, fontWeight: '700', color: theme.skyBlue, marginLeft: 4 },
@@ -571,16 +584,11 @@ const getStyles = (theme) => StyleSheet.create({
   saleCard: { width: 140, backgroundColor: theme.card, borderRadius: 20, marginRight: 15, padding: 10, elevation: 2, borderWidth: 1, borderColor: theme.border },
   saleImg: { width: '100%', height: 110, borderRadius: 12, backgroundColor: theme.bg, marginBottom: 10 },
   discountBadge: { position: 'absolute', top: 15, left: 15, backgroundColor: theme.red, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, zIndex: 1 },
-  discountText: { color: 'white', fontSize: 10, fontWeight: '900' },
   saleInfo: { paddingHorizontal: 4 },
   companyName: { fontSize: 10, fontWeight: '700', color: theme.textSub, marginLeft: 4 },
   saleTitle: { fontSize: 13, fontWeight: '800', color: theme.textMain, marginTop: 2 },
 
-  gridProductCard: {
-    backgroundColor: theme.card, width: (width / 2) - 24, marginHorizontal: 12,
-    marginBottom: 20, borderRadius: 20, overflow: 'hidden', elevation: 2,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, borderWidth: 1, borderColor: theme.border
-  },
+  gridProductCard: { backgroundColor: theme.card, width: (width / 2) - 24, marginHorizontal: 12, marginBottom: 20, borderRadius: 20, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, borderWidth: 1, borderColor: theme.border },
   gridImg: { width: '100%', height: 160, backgroundColor: theme.bg },
   gridInfo: { padding: 12 },
   brandRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
@@ -589,8 +597,5 @@ const getStyles = (theme) => StyleSheet.create({
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
   ratingRow: { flexDirection: 'row', alignItems: 'center' },
   ratingText: { fontSize: 11, fontWeight: '600', color: theme.textSub, marginLeft: 4 },
-  gridAddBtn: {
-    backgroundColor: theme.red, width: 30, height: 30, borderRadius: 10, 
-    justifyContent: 'center', alignItems: 'center'
-  },
+  gridAddBtn: { backgroundColor: theme.red, width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
 });
