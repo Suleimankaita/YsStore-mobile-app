@@ -17,7 +17,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
-// --- Theme Definition ---
 const getTheme = (isDark) => {
   return {
     primary: '#0369A1',

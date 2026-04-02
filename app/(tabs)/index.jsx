@@ -15,13 +15,15 @@ import {
   Alert,
   RefreshControl
 } from 'react-native';
-import { Image } from 'expo-image'; // Replacing standard RN Image
-import * as ImagePicker from 'expo-image-picker'; // Added Image Picker
+import {SetRouter} from "@/Features/Funcslice";
+import { Image } from 'expo-image'; 
+import * as ImagePicker from 'expo-image-picker'; 
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme'; 
 import { router } from 'expo-router';
-import { useGetEcomerceProductQuery } from '@/Features/api/EcomerceSlice';
+import { useGetEcomerceProductQuery, useGetDealsQuery } from '@/Features/api/EcomerceSlice';
 import { uri } from '@/Features/api/Uri';
+import { useDispatch } from 'react-redux';
 
 const { width } = Dimensions.get('window');
 
@@ -43,15 +45,27 @@ const getThemeColors = (colorScheme) => {
 };
 
 // --- Isolated Timer Component ---
-const CountdownTimer = memo(({ theme, styles }) => {
-  const [timeLeft, setTimeLeft] = useState(3600 * 4);
+const CountdownTimer = memo(({ theme, styles, targetDate }) => {
+  const [timeLeft, setTimeLeft] = useState(0);
 
   useEffect(() => {
+    if (!targetDate) return;
+
+    const calculateTimeLeft = () => {
+      const difference = new Date(targetDate).getTime() - new Date().getTime();
+      return difference > 0 ? Math.floor(difference / 1000) : 0;
+    };
+
+    setTimeLeft(calculateTimeLeft());
+
     const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      const remaining = calculateTimeLeft();
+      setTimeLeft(remaining);
+      if (remaining <= 0) clearInterval(timer);
     }, 1000);
+
     return () => clearInterval(timer);
-  }, []);
+  }, [targetDate]);
 
   const formatTime = (seconds) => {
     const h = Math.floor(seconds / 3600);
@@ -60,6 +74,14 @@ const CountdownTimer = memo(({ theme, styles }) => {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  if (timeLeft <= 0 && targetDate) {
+    return (
+      <View style={[styles.timerBadge, { backgroundColor: '#475569' }]}>
+        <Text style={styles.timerText}>EXPIRED</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.timerBadge, { backgroundColor: theme.red }]}>
       <Ionicons name="time-outline" size={14} color="white" />
@@ -67,7 +89,6 @@ const CountdownTimer = memo(({ theme, styles }) => {
     </View>
   );
 });
-
 // --- Mock Data ---
 const HERO_BANNERS = [
   { id: 'h1', title: 'Season Finale', subtitle: '50% OFF Tools', bg: '#0EA5E9', btnText: 'Shop Now', image: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80' },
@@ -107,6 +128,10 @@ export default function YSStoreProApp() {
     pollingInterval: 1000,
     refetchOnFocus: true,
   });
+  const { data: dealsData, isLoading: dealsLoading, isSuccess: dealsSuccess, isError: dealsError, refetch: refetchDeals } = useGetDealsQuery('', {
+    pollingInterval: 1000,
+    refetchOnFocus: true,
+  });
   
   const [Products, SetProducts] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -130,8 +155,9 @@ export default function YSStoreProApp() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refetch();
+    await refetchDeals();
     setRefreshing(false);
-  }, [refetch]);
+  }, [refetch, refetchDeals]);
 
   // --- Visual Search (Image Picker/Camera) Logic ---
   const handleVisualSearch = () => {
@@ -164,6 +190,7 @@ export default function YSStoreProApp() {
     }
   };
 
+
   const openGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -173,7 +200,6 @@ export default function YSStoreProApp() {
     });
     if (!result.canceled) {
       setSearchImageUri(result.assets[0].uri);
-      // TODO: Handle image upload to your backend here
     }
   };
 
@@ -204,26 +230,40 @@ export default function YSStoreProApp() {
 
   const followedShopsData = SHOPS.filter(shop => followedIds.includes(shop.id));
 
+  const nearestDealEnd = useMemo(() => {
+    if (!dealsData?.deals || dealsData.deals.length === 0) return null;
+    
+    // Filter out deals that already expired and find the minimum end time
+    const futureDeals = dealsData.deals
+      .map(d => new Date(d.dealEndTime).getTime())
+      .filter(time => time > Date.now());
+
+    if (futureDeals.length === 0) return null;
+    return new Date(Math.min(...futureDeals)).toISOString();
+  }, [dealsData]);
+
   const renderProduct = ({ item }) => {
     const random = Math.floor(Math.random() * 5) + 1;
-    const imageUrl = item.img && item.img[0] ? `${uri}/img/${item.img[0]}` : item.image;
-
+    const imageUrl = item?.img && item?.img[0] ? `${uri}/img/${item?.img[0]}` : item.image;
+    // console.log("Rendering product:", item);
     return (
-      <TouchableOpacity style={styles.gridProductCard} onPress={() => router.push('(PDP)/PDP')}>
-        {/* Replaced standard Image with expo-image */}
+      <TouchableOpacity style={styles.gridProductCard} onPress={() => {
+              dispatch(SetRouter(item?.name));
+        
+        router.push(`/(PDP)/${item._id}`)}}>
         <Image 
           source={{ uri: imageUrl }} 
           style={styles.gridImg} 
           contentFit="cover" 
-          transition={300} // Smooth fade in
+          transition={300} 
         />
         <View style={styles.gridInfo}>
           <View style={styles.brandRow}>
             <Ionicons name="storefront" size={10} color={theme.textSub} />
             <Text style={styles?.companyName} numberOfLines={1}>{item?.sourceName}</Text>
           </View>
-          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.itemPrice}>{Number(item?.soldAtPrice || item?.price).toLocaleString()}</Text>
+          <Text style={styles?.itemName} numberOfLines={1}>{item?.name}</Text>
+          <Text style={styles?.itemPrice}>{Number(item?.soldAtPrice || item?.price).toLocaleString()}</Text>
 
           <View style={styles.cardFooter}>
             <View style={styles.ratingRow}>
@@ -244,6 +284,10 @@ export default function YSStoreProApp() {
   const filteredBestSellers = useMemo(() => {
     return Products.filter(res => res.isBestSeller === true);
   }, [Products]);
+
+  const dispatch=useDispatch();
+  // Handle active deals data
+  const activeDeals = dealsData?.deals?.length > 0 ? dealsData.deals : DAILY_DROPS;
 
   const HeaderComponent = () => (
     <>
@@ -270,7 +314,6 @@ export default function YSStoreProApp() {
             return (
               <View style={styles.heroBannerWrapper}>
                 <Animated.View style={[styles.heroBanner, { transform: [{ scale }], opacity }]}>
-                  {/* Replaced ImageBackground with an absolute expo-image + wrapper View */}
                   <View style={styles.bannerImageBg}>
                     <Image 
                       source={{ uri: item.image }} 
@@ -336,7 +379,6 @@ export default function YSStoreProApp() {
             {followedShopsData.map((shop) => (
               <TouchableOpacity key={shop.id} style={styles.followedCircleCard}>
                 <View>
-                  {/* Converted to expo-image */}
                   <Image source={{ uri: shop.image }} style={styles.followedAvatar} contentFit="cover" />
                   {shop.isLive ? (
                     <View style={styles.liveBadge}><Text style={styles.liveText}>LIVE</Text></View>
@@ -358,7 +400,6 @@ export default function YSStoreProApp() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalList}>
         {SHOPS.map((shop) => (
           <View key={shop.id} style={styles.shopCard}>
-             {/* Converted to expo-image */}
             <Image source={{ uri: shop.image }} style={styles.shopAvatar} contentFit="cover" transition={200} />
             <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
             <TouchableOpacity
@@ -373,32 +414,50 @@ export default function YSStoreProApp() {
         ))}
       </ScrollView>
 
+      {/* DYNAMIC DEALS SECTION */}
       <View style={[styles.sectionHeader, { marginTop: 10 }]}>
         <View style={styles.row}>
           <Text style={styles.sectionTitle}>Daily Drop</Text>
-          <CountdownTimer theme={theme} styles={styles} />
+        <CountdownTimer theme={theme} styles={styles} targetDate={nearestDealEnd} />
         </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalList}>
-        {DAILY_DROPS.map((drop) => (
-          <View key={drop.id} style={styles.dropCard}>
-            {/* Converted to expo-image */}
-            <Image source={{ uri: drop.image }} style={styles.dropImg} contentFit="cover" transition={200} />
-            <View style={styles.dropContent}>
-              <View style={styles.brandRow}>
-                <Ionicons name="business" size={12} color={theme.skyBlue} />
-                <Text style={styles.dropBrand}>{drop.brand}</Text>
-              </View>
-              <Text style={styles.dropTitle} numberOfLines={1}>{drop.name}</Text>
-              <View style={styles.dropFooter}>
-                <Text style={styles.dropStock}>{drop.stock}</Text>
-                <TouchableOpacity style={styles.dropBtn}>
-                  <Text style={styles.dropBtnText}>Get Notified</Text>
-                </TouchableOpacity>
+        {activeDeals.map((drop) => {
+          // Check if it's dynamic data from API or the static mockup fallback
+          const isDynamic = !!drop._id; 
+          const id = isDynamic ? drop._id : drop.id;
+          const imageUrl = isDynamic ? `${uri}/img/${drop.img}` : drop.image;
+          const brandText = isDynamic ? `Save ₦${Number(drop.originalPrice - drop.dealPrice).toLocaleString()}` : drop.brand;
+          const stockText = isDynamic ? `Only ${drop.unitsLeft} left` : drop.stock;
+          const btnText = isDynamic ? `₦${Number(drop.dealPrice).toLocaleString()}` : 'Get Notified';
+
+          return (
+            <View key={id} style={styles.dropCard}>
+              <Image source={{ uri: imageUrl }} style={styles.dropImg} contentFit="cover" transition={200} />
+              
+              {/* Added Discount Badge from backend */}
+              {isDynamic && drop.discount && (
+                <View style={styles.discountBadge}>
+                  <Text style={{color: 'white', fontWeight: 'bold', fontSize: 10}}>{drop.discount}% OFF</Text>
+                </View>
+              )}
+
+              <View style={styles.dropContent}>
+                <View style={styles.brandRow}>
+                  <Ionicons name={isDynamic ? "pricetag" : "business"} size={12} color={theme.skyBlue} />
+                  <Text style={styles.dropBrand}>{brandText}</Text>
+                </View>
+                <Text style={styles.dropTitle} numberOfLines={1}>{drop.name}</Text>
+                <View style={styles.dropFooter}>
+                  <Text style={styles.dropStock}>{stockText}</Text>
+                  <TouchableOpacity style={styles.dropBtn}>
+                    <Text style={styles.dropBtnText}>{btnText}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       <View style={[styles.sectionHeader, { marginTop: 10 }]}>
@@ -408,7 +467,6 @@ export default function YSStoreProApp() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalList}>
         {filteredBestSellers.map((sale) => (
           <TouchableOpacity key={sale?._id} style={styles.saleCard}>
-             {/* Converted to expo-image */}
             <Image source={{ uri: `${uri}/img/${sale.img[0]}` }} style={styles.saleImg} contentFit="cover" transition={300} />
             <View style={styles.saleInfo}>
               <Text style={styles.companyName} numberOfLines={1}>{sale?.sourceName}</Text>
@@ -435,7 +493,9 @@ export default function YSStoreProApp() {
             <Text style={[styles.logoText, { color: theme.red }]}>Store</Text>
           </View>
           <View style={styles.row}>
-            <TouchableOpacity onPress={() => router.push('(notification)/notification')}>
+            <TouchableOpacity onPress={() => {
+              router.push('(notification)/notification')}
+              }>
               <Ionicons name="notifications-outline" size={24} color={theme.icon} style={{ marginRight: 15 }} />
             </TouchableOpacity>
             <View>
@@ -447,7 +507,6 @@ export default function YSStoreProApp() {
           </View>
         </View>
         
-        {/* Updated Search Bar with Visual Search capability */}
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={20} color={theme.textSub} style={{ marginRight: 10 }} />
           {searchImageUri ? (
@@ -465,7 +524,6 @@ export default function YSStoreProApp() {
               style={styles.searchInput}
             />
           )}
-          {/* Camera/Upload Icon */}
           {!searchImageUri && (
             <TouchableOpacity onPress={handleVisualSearch} style={styles.cameraBtn}>
               <Ionicons name="camera-outline" size={20} color={theme.skyBlue} />
@@ -482,7 +540,7 @@ export default function YSStoreProApp() {
         ListHeaderComponent={HeaderComponent}
         contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={ // Added Pull to Refresh
+        refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
             onRefresh={onRefresh}

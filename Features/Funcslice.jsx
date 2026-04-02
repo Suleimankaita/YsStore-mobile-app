@@ -9,6 +9,7 @@ const initialState = {
   UserCart: [],
   Role: null,
   UserDetails: {},
+  router: null,
 };
 
 const Funcslice = createSlice({
@@ -141,6 +142,9 @@ const Funcslice = createSlice({
           window.location.replace=true
           
     },
+    SetRouter: (state, action) => {
+      state.router = action.payload;
+    }
   },
 });
 
@@ -153,6 +157,7 @@ export const {
   setToken,
   SetRole,
    Logout,
+   SetRouter,
   Setid,
   SetUserDetails,
   AddCart,
@@ -168,5 +173,6 @@ export const GetCart = (state) => state.Function.Cart;
 export const GetId = (state) => state.Function.id;
 export const GetUserCart = (state) => state.Function.UserCart;
 export const GetUserDetails= (state) => state.Function.UserDetails;
+export const GetRouter = (state) => state.Function.router;
 
 export default Funcslice.reducer;
