@@ -12,6 +12,7 @@ const AuthInput = ({
   label,
   value,
   onChangeText,
+  readOnly=false,
   placeholder,
   secureTextEntry = false,
   keyboardType = 'default',
@@ -41,6 +42,7 @@ const AuthInput = ({
       <Animated.View style={[styles.inputContainer, { borderColor }]}>
         <TextInput
           value={value}
+          readOnly={readOnly}
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor="#7C8498"

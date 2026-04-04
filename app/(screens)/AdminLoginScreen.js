@@ -19,13 +19,15 @@ import AuthInput from '@/components/AuthInputs';
 import PrimaryButton from '@/components/PrimaryButton';
 import ScreenFadeWrapper from '@/components/ui/screenwrapper';
 import { router } from 'expo-router';
+import { useAuthRegsMutation } from '@/Features/api/UserSlice';
+import * as location from "expo-location";
 
 const SKY = 'skyblue';
 const TOMATO = 'tomato';
 
 const AdminLoginScreen = ({ localStorages = {} }) => {
   const slideAnim = useRef(new Animated.Value(0)).current;
-
+  const [UserRegs,{isLoading,isSuccess,error,isError}]=useAuthRegsMutation()
   const initialRegisterForm = useMemo(
     () => ({
       username: localStorages?.username || '',
@@ -106,6 +108,22 @@ const AdminLoginScreen = ({ localStorages = {} }) => {
     }
   }, [activeStateObj]);
 
+
+  useEffect(() => {
+      (async () => {
+        let { status } = await location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return alert('Permission to access location was denied');
+        const {coords}=await location.getCurrentPositionAsync({
+          accuracy: location.Accuracy.Highest,
+        });
+  
+        const {latitude,longitude}=coords;
+        setRegisterForm((prev)=>({...prev,lat:latitude,long:longitude}))
+        
+          })();
+    }, [])
+  
+
   const filteredStates = useMemo(() => {
     if (!stateSearch.trim()) return allStates;
     return allStates.filter((item) => {
@@ -164,8 +182,25 @@ const AdminLoginScreen = ({ localStorages = {} }) => {
     console.log('Admin login', loginForm);
   };
 
-  const handleRegister = () => {
-    console.log('Admin register', registerForm);
+  const handleRegister = async() => {
+    try{
+      const payload = {
+          Username: registerForm?.username,
+          Password: registerForm?.password,
+          Firstname: registerForm?.firstname,
+          Lastname: registerForm?.lastname,
+          // StreetName: registerForm?.,
+          PostalNumber: registerForm?.adminPostal,
+          Lat: registerForm?.lat,
+          Long: registerForm?.long,
+          Email: registerForm?.email,
+        };
+        const complete=await UserRegs(payload).unwrap()
+
+        console.log(complete)
+    }catch(err){
+      alert(err?.message||err?.data?.message)
+    }
   };
 
   const nextStep = () => {
@@ -438,6 +473,7 @@ const AdminLoginScreen = ({ localStorages = {} }) => {
           <>
             <AuthInput
               label="Latitude"
+              readOnly={true}
               value={String(registerForm.lat)}
               onChangeText={(text) => updateRegisterField('lat', text)}
               placeholder="Enter latitude"
@@ -446,6 +482,7 @@ const AdminLoginScreen = ({ localStorages = {} }) => {
 
             <AuthInput
               label="Longitude"
+              readOnly={true}
               value={String(registerForm.long)}
               onChangeText={(text) => updateRegisterField('long', text)}
               placeholder="Enter longitude"

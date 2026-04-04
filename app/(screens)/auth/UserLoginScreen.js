@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   FlatList,
@@ -18,11 +18,16 @@ import { getStates, getLGAsByState } from '@some19ice/nigeria-geo-core';
 import AuthInput from '@/components/AuthInputs';
 import PrimaryButton from '@/components/PrimaryButton';
 import ScreenFadeWrapper from '@/components/ui/screenwrapper';
+import { useAuthRegsMutation,useUsersLoginMutation } from '@/Features/api/UserSlice';
+import { Trophy } from 'lucide-react-native';
+import * as location from "expo-location";
 
 const SKY = 'skyblue';
 const TOMATO = 'tomato';
 
 const UserLoginScreen = ({ navigation }) => {
+   const [UserRegs,{isLoading,isSuccess,error,isError}]=useAuthRegsMutation()
+  const [UsersLogin,{isLoading:IsLoading, isSuccess: IsSuccess, error: Error, isError: IsError}]=useUsersLoginMutation()
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const [mode, setMode] = useState('login');
@@ -62,6 +67,20 @@ const UserLoginScreen = ({ navigation }) => {
       return [];
     }
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      let { status } = await location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return alert('Permission to access location was denied');
+      const {coords}=await location.getCurrentPositionAsync({
+        accuracy: location.Accuracy.Highest,
+      });
+
+      const {latitude,longitude}=coords;
+      setRegisterForm((prev)=>({...prev,Lat:latitude,Long:longitude}))
+      
+        })();
+  }, [])
 
   const selectedStateObj = useMemo(() => {
     return allStates.find((item) => {
@@ -144,12 +163,48 @@ const UserLoginScreen = ({ navigation }) => {
     }
   };
 
-  const handleLogin = () => {
-    console.log('User login', loginForm);
-  };
+  const handleLogin = useCallback(async() => {
+    try{
+      const payload = {
+        Username:registerForm?.Username,
+        Password:registerForm?.Password,
+      }
+      const logins=await UsersLogin(payload).unwrap()
+      console.log('logins',logins)
 
-  const handleRegister = () => {
-    console.log('User register', registerForm);
+    }catch(error){
+      alert(error?.message||error?.data?.message);
+    }
+  },[registerForm.Username, registerForm.Password,UsersLogin ]);
+
+  useEffect(()=>{
+    if(isSuccess){
+      handleLogin();
+    }
+  },[isSuccess,handleLogin])
+  
+
+  const handleRegister = async() => {
+  try{
+      if (registerForm.Password !== registerForm.confirmPassword) return ;
+      const payload = {
+        Username: registerForm?.Username,
+        Password: registerForm?.Password,
+        Firstname: registerForm?.Firstname,
+        Lastname: registerForm?.Lastname,
+        // StreetName: registerForm?.,
+        PostalNumber: registerForm?.PostalNumber,
+        Lat: registerForm?.Lat,
+        Long: registerForm?.Long,
+        Email: registerForm?.Email,
+      };
+      const complete=await UserRegs(payload).unwrap()
+
+      
+      console.log(complete)
+    }catch(error){
+      alert(error?.message||error?.data?.message);
+    }
   };
 
   const switchMode = (selectedMode) => {
@@ -306,6 +361,7 @@ const UserLoginScreen = ({ navigation }) => {
 
             <AuthInput
               label="Latitude"
+              readOnly={true}
               value={String(registerForm.Lat)}
               onChangeText={(text) => updateRegisterField('Lat', text)}
               placeholder="Latitude"
@@ -314,6 +370,7 @@ const UserLoginScreen = ({ navigation }) => {
 
             <AuthInput
               label="Longitude"
+              readOnly={true}
               value={String(registerForm.Long)}
               onChangeText={(text) => updateRegisterField('Long', text)}
               placeholder="Longitude"
