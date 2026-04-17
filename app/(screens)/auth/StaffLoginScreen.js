@@ -13,19 +13,28 @@ import {
 import AuthInput from '@/components/AuthInputs';
 import PrimaryButton from '@/components/PrimaryButton';
 import ScreenFadeWrapper from '@/components/ui/screenwrapper';
-
+import { router } from 'expo-router';
+import { useLoginCompanyUsersMutation } from '@/Features/api/UserSlice';
 const StaffLoginScreen = ({ navigation }) => {
   const [form, setForm] = useState({
     staffId: '',
     password: '',
   });
 
+  const [loginStaff, { isLoading,isSuccess,error }] = useLoginCompanyUsersMutation();
+
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleLogin = () => {
-    console.log('Staff login', form);
+  const handleLogin = async() => {
+    try{
+
+      const users=await loginStaff({Username:form?.staffId, Password:form?.password}).unwrap();
+      console.log(users);
+    }catch(err){
+      alert(err?.message||err?.data?.message||'An error occurred during login. Please try again.');
+    }
   };
 
   return (
@@ -41,7 +50,7 @@ const StaffLoginScreen = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
         >
           <ScreenFadeWrapper style={styles.container}>
-            <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Pressable onPress={() => router.back()} style={styles.backButton}>
               <Text style={styles.backText}>← Back</Text>
             </Pressable>
 

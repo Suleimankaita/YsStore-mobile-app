@@ -21,6 +21,7 @@ import ScreenFadeWrapper from '@/components/ui/screenwrapper';
 import { useAuthRegsMutation,useUsersLoginMutation } from '@/Features/api/UserSlice';
 import { Trophy } from 'lucide-react-native';
 import * as location from "expo-location";
+import { router } from 'expo-router';
 
 const SKY = 'skyblue';
 const TOMATO = 'tomato';
@@ -437,7 +438,7 @@ const UserLoginScreen = ({ navigation }) => {
             <View style={styles.glowOne} />
             <View style={styles.glowTwo} />
 
-            <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Pressable onPress={() => router.back()} style={styles.backButton}>
               <Text style={styles.backText}>← Back</Text>
             </Pressable>
 

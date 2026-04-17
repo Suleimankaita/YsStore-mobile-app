@@ -12,30 +12,108 @@ import {
   Platform,
   Modal,
   Pressable,
+  StatusBar,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
 
-const getTheme = (isDark) => {
+const getTheme = () => {
   return {
-    primary: '#0369A1',
-    bg: isDark ? '#0F172A' : '#F8FAFC',
-    card: isDark ? '#1E293B' : '#FFFFFF',
-    text: isDark ? '#F8FAFC' : '#0F172A',
-    subText: isDark ? '#94A3B8' : '#64748B',
-    border: isDark ? '#334155' : '#E2E8F0',
+    primary: '#FF6347',
+    primaryDeep: '#FF6347',
+    secondary: '#38BDF8',
+    bg: '#F3F4F6',
+    card: '#FFFFFF',
+    text: '#111827',
+    subText: '#6B7280',
+    border: '#E5E7EB',
     red: '#EF4444',
     green: '#22C55E',
-    accent: '#38BDF8',
+    gold: '#F59E0B',
+    orange: '#FB923C',
+    softOrange: '#FFF1EB',
+    softBlue: '#EAF8FF',
+    shadow: '#000000',
   };
 };
 
-// --- Reusable Animated Button ---
+const recommendedProducts = [
+  {
+    id: '1',
+    name: 'Wireless Bluetooth Earbuds Pro',
+    price: '₦12,500',
+    oldPrice: '₦18,000',
+    sold: '2,341 sold',
+    image:
+      'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?q=80&w=1200&auto=format&fit=crop',
+  },
+  {
+    id: '2',
+    name: 'Smart Watch Series X',
+    price: '₦24,000',
+    oldPrice: '₦31,500',
+    sold: '1,209 sold',
+    image:
+      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=1200&auto=format&fit=crop',
+  },
+  {
+    id: '3',
+    name: 'Fast Charger Type-C 45W',
+    price: '₦4,800',
+    oldPrice: '₦7,000',
+    sold: '5,102 sold',
+    image:
+      'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?q=80&w=1200&auto=format&fit=crop',
+  },
+  {
+    id: '4',
+    name: 'Premium Phone Case Shockproof',
+    price: '₦3,200',
+    oldPrice: '₦5,500',
+    sold: '3,987 sold',
+    image:
+      'https://images.unsplash.com/photo-1603314585442-ee3b3c16fbcf?q=80&w=1200&auto=format&fit=crop',
+  },
+  {
+    id: '5',
+    name: 'Mini Power Bank 10000mAh',
+    price: '₦10,900',
+    oldPrice: '₦14,200',
+    sold: '1,876 sold',
+    image:
+      'https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?q=80&w=1200&auto=format&fit=crop',
+  },
+  {
+    id: '6',
+    name: 'Android Gaming Phone Cooler',
+    price: '₦7,700',
+    oldPrice: '₦9,900',
+    sold: '642 sold',
+    image:
+      'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?q=80&w=1200&auto=format&fit=crop',
+  },
+];
+
 const AnimatedButton = ({ children, onPress, style }) => {
   const scaleValue = useRef(new Animated.Value(1)).current;
-  const onPressIn = () => Animated.spring(scaleValue, { toValue: 0.96, useNativeDriver: true }).start();
-  const onPressOut = () => Animated.spring(scaleValue, { toValue: 1, friction: 3, tension: 40, useNativeDriver: true }).start();
+
+  const onPressIn = () => {
+    Animated.spring(scaleValue, {
+      toValue: 0.975,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scaleValue, {
+      toValue: 1,
+      friction: 4,
+      tension: 45,
+      useNativeDriver: true,
+    }).start();
+  };
 
   return (
     <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut}>
@@ -46,176 +124,399 @@ const AnimatedButton = ({ children, onPress, style }) => {
   );
 };
 
-// --- Animated Activity Chart Component ---
-const ActivityChart = ({ theme }) => {
-  const data = [40, 70, 45, 90, 65, 80, 50];
-  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  const animations = data.map(() => useRef(new Animated.Value(0)).current);
+const OrderIconItem = ({ icon, label, value, color, theme }) => (
+  <AnimatedButton style={styles.orderIconItem}>
+    <View style={[styles.orderIconCircle, { backgroundColor: `${color}15` }]}>
+      <MaterialCommunityIcons name={icon} size={22} color={color} />
+      {value ? (
+        <View style={[styles.orderBadge, { backgroundColor: theme.red }]}>
+          <Text style={styles.orderBadgeText}>{value}</Text>
+        </View>
+      ) : null}
+    </View>
+    <Text style={[styles.orderIconLabel, { color: theme.subText }]} numberOfLines={1}>
+      {label}
+    </Text>
+  </AnimatedButton>
+);
 
-  useEffect(() => {
-    const sequence = animations.map((anim, index) => 
-      Animated.spring(anim, { toValue: data[index], tension: 20, friction: 4, useNativeDriver: false })
-    );
-    Animated.stagger(100, sequence).start();
-  }, []);
+const ToolItem = ({ icon, label, color, theme }) => (
+  <AnimatedButton style={styles.toolItem}>
+    <View style={[styles.toolCircle, { backgroundColor: `${color}14` }]}>
+      <Ionicons name={icon} size={20} color={color} />
+    </View>
+    <Text style={[styles.toolText, { color: theme.text }]} numberOfLines={2}>
+      {label}
+    </Text>
+  </AnimatedButton>
+);
 
-  return (
-    <View style={[styles.chartContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-        <Text style={[styles.chartTitle, { color: theme.text }]}>Weekly Views</Text>
-        <View style={styles.growthBadge}><Text style={styles.growthText}>+12%</Text></View>
-      </View>
-      <View style={styles.chartBarsArea}>
-        {data.map((val, i) => (
-          <View key={i} style={styles.barWrapper}>
-            <Animated.View 
-              style={[
-                styles.bar, 
-                { height: animations[i], backgroundColor: i === 3 ? theme.primary : theme.accent + '40' }
-              ]} 
-            />
-            <Text style={[styles.barLabel, { color: theme.subText }]}>{days[i]}</Text>
-          </View>
-        ))}
+const ProductCard = ({ item, theme }) => (
+  <AnimatedButton
+    style={[
+      styles.productCard,
+      {
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+      },
+    ]}
+  >
+    <Image source={{ uri: item.image }} style={styles.productImage} />
+    <View style={styles.productInfo}>
+      <Text style={[styles.productName, { color: theme.text }]} numberOfLines={2}>
+        {item.name}
+      </Text>
+
+      <Text style={[styles.productPrice, { color: theme.primary }]}>{item.price}</Text>
+      <Text style={[styles.productOldPrice, { color: theme.subText }]}>{item.oldPrice}</Text>
+
+      <View style={styles.productMetaRow}>
+        <Text style={[styles.productSold, { color: theme.subText }]}>{item.sold}</Text>
+        <TouchableOpacity style={[styles.cartMiniBtn, { backgroundColor: theme.primary }]}>
+          <Ionicons name="cart-outline" size={14} color="#fff" />
+        </TouchableOpacity>
       </View>
     </View>
-  );
-};
+  </AnimatedButton>
+);
+
+const RowItem = ({ icon, title, extra, color, theme }) => (
+  <AnimatedButton
+    style={[
+      styles.rowItem,
+      {
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+      },
+    ]}
+  >
+    <View style={styles.rowLeft}>
+      <View style={[styles.rowIconWrap, { backgroundColor: `${color}14` }]}>
+        <Ionicons name={icon} size={18} color={color} />
+      </View>
+      <View>
+        <Text style={[styles.rowTitle, { color: theme.text }]}>{title}</Text>
+        {extra ? <Text style={[styles.rowExtra, { color: theme.subText }]}>{extra}</Text> : null}
+      </View>
+    </View>
+    <Ionicons name="chevron-forward" size={16} color={theme.subText} />
+  </AnimatedButton>
+);
 
 export default function PremiumMenuScreen() {
-  // Using a fixed dark/light mode toggle for this example, 
-  // or you can use useColorScheme() from 'react-native'
-  const isDark = false; 
-  const theme = useMemo(() => getTheme(isDark), [isDark]);
+  const theme = useMemo(() => getTheme(), []);
 
   const [isLogoutVisible, setLogoutVisible] = useState(false);
   const modalY = useRef(new Animated.Value(height)).current;
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const listSildeAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.spring(listSildeAnim, { toValue: 0, tension: 20, useNativeDriver: true })
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 650,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 25,
+        useNativeDriver: true,
+      }),
     ]).start();
   }, []);
 
   const toggleLogoutModal = (show) => {
     if (show) {
       setLogoutVisible(true);
-      Animated.timing(modalY, { toValue: 0, duration: 400, useNativeDriver: true }).start();
+      Animated.timing(modalY, {
+        toValue: 0,
+        duration: 320,
+        useNativeDriver: true,
+      }).start();
     } else {
-      Animated.timing(modalY, { toValue: height, duration: 300, useNativeDriver: true }).start(() => setLogoutVisible(false));
+      Animated.timing(modalY, {
+        toValue: height,
+        duration: 260,
+        useNativeDriver: true,
+      }).start(() => setLogoutVisible(false));
     }
   };
 
-  const ListItem = ({ icon, title, badge, extra, color }) => (
-    <AnimatedButton style={[styles.listItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <View style={styles.listLeft}>
-        <View style={[styles.listIconCircle, { backgroundColor: (color || theme.subText) + '15' }]}>
-          <Ionicons name={icon} size={20} color={color || theme.subText} />
-        </View>
-        <Text style={[styles.listTitle, { color: theme.text }]}>{title}</Text>
-      </View>
-      <View style={styles.listRight}>
-        {badge && <View style={[styles.badge, { backgroundColor: theme.primary }]}><Text style={styles.badgeText}>{badge}</Text></View>}
-        {extra && <Text style={[styles.extraText, { color: theme.subText }]}>{extra}</Text>}
-        <Ionicons name="chevron-forward" size={16} color={theme.border} />
-      </View>
-    </AnimatedButton>
-  );
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      <View style={[styles.headerBg, { backgroundColor: theme.primary }]} />
-      
-      <View style={styles.headerNav}>
-        <TouchableOpacity><Ionicons name="chevron-back" size={28} color="white" /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity><Ionicons name="qr-code-outline" size={24} color="white" /></TouchableOpacity>
-      </View>
+      <StatusBar barStyle="light-content" backgroundColor={theme.primary} />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-        
-        {/* User Profile Card */}
-        <Animated.View style={[styles.userCard, { backgroundColor: theme.card, opacity: fadeAnim }]}>
-          <View style={styles.userRow}>
-            <View>
-              <Image source={{ uri: 'https://i.pravatar.cc/150?u=john' }} style={[styles.avatar, { borderColor: theme.bg }]} />
-              <View style={[styles.activeDot, { backgroundColor: theme.green, borderColor: theme.card }]} />
-            </View>
-            <View style={styles.userInfo}>
-              <View style={styles.nameRow}>
-                <Text style={[styles.userName, { color: theme.text }]}>John Adam</Text>
-                <View style={styles.proBadge}><Text style={styles.proText}>GOLD</Text></View>
+      <LinearGradient
+        colors={['#FF6347', '#38BDF8']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerWrap}
+      >
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity style={styles.headerIconBtn}>
+            <Ionicons name="scan-outline" size={22} color="white" />
+          </TouchableOpacity>
+
+          <View style={styles.headerRightIcons}>
+            <TouchableOpacity style={styles.headerIconBtn}>
+              <Ionicons name="chatbubble-ellipses-outline" size={21} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerIconBtn}>
+              <Ionicons name="notifications-outline" size={21} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerIconBtn}>
+              <Ionicons name="settings-outline" size={21} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.accountMiniBar}>
+          <Text style={styles.accountMiniTitle}>My Account</Text>
+          <Text style={styles.accountMiniSub}>Manage orders, wallet, coupons and settings</Text>
+        </View>
+      </LinearGradient>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+      >
+        <Animated.View
+          style={[
+            styles.profileCard,
+            {
+              backgroundColor: theme.card,
+              shadowColor: theme.shadow,
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          <View style={styles.profileRow}>
+            <View style={styles.profileLeft}>
+              <Image
+                source={{ uri: 'https://i.pravatar.cc/150?u=ysstore-user' }}
+                style={styles.avatar}
+              />
+              <View style={styles.profileInfo}>
+                <View style={styles.profileNameRow}>
+                  <Text style={[styles.profileName, { color: theme.text }]}>John Adam</Text>
+                  <View style={styles.goldTag}>
+                    <Text style={styles.goldTagText}>Gold</Text>
+                  </View>
+                </View>
+                <Text style={[styles.profileHandle, { color: theme.subText }]}>@john_creative</Text>
+                <Text style={[styles.profileSubText, { color: theme.subText }]}>
+                  Member since 2024
+                </Text>
               </View>
-              <Text style={[styles.userPhone, { color: theme.subText }]}>@john_creative</Text>
+            </View>
+
+            <TouchableOpacity style={[styles.editProfileBtn, { backgroundColor: theme.softBlue }]}>
+              <Feather name="edit-2" size={15} color={theme.secondary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.profileStatsRow}>
+            <View style={styles.profileStat}>
+              <Text style={[styles.profileStatValue, { color: theme.text }]}>1,240</Text>
+              <Text style={[styles.profileStatLabel, { color: theme.subText }]}>Points</Text>
+            </View>
+            <View style={[styles.profileDivider, { backgroundColor: theme.border }]} />
+            <View style={styles.profileStat}>
+              <Text style={[styles.profileStatValue, { color: theme.text }]}>₦25,400</Text>
+              <Text style={[styles.profileStatLabel, { color: theme.subText }]}>Wallet</Text>
+            </View>
+            <View style={[styles.profileDivider, { backgroundColor: theme.border }]} />
+            <View style={styles.profileStat}>
+              <Text style={[styles.profileStatValue, { color: theme.text }]}>6</Text>
+              <Text style={[styles.profileStatLabel, { color: theme.subText }]}>Coupons</Text>
             </View>
           </View>
 
-          {/* Stats Section */}
-          <View style={[styles.statsContainer, { backgroundColor: theme.bg + '50' }]}>
-            <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: theme.text }]}>12.8K</Text>
-              <Text style={[styles.statLabel, { color: theme.subText }]}>Followers</Text>
+          <TouchableOpacity style={[styles.memberBanner, { backgroundColor: theme.softOrange }]}>
+            <View style={styles.memberBannerLeft}>
+              <View style={[styles.memberBannerIcon, { backgroundColor: theme.primary }]}>
+                <Ionicons name="diamond-outline" size={15} color="white" />
+              </View>
+              <View>
+                <Text style={[styles.memberBannerTitle, { color: theme.text }]}>Member Benefits</Text>
+                <Text style={[styles.memberBannerSubTitle, { color: theme.subText }]}>
+                  Special discounts and premium offers
+                </Text>
+              </View>
             </View>
-            <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-            <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: theme.text }]}>842</Text>
-              <Text style={[styles.statLabel, { color: theme.subText }]}>Following</Text>
-            </View>
-            <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-            <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: theme.text }]}>45.2K</Text>
-              <Text style={[styles.statLabel, { color: theme.subText }]}>Viewers</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity style={[styles.viewProfileLine, { borderTopColor: theme.border }]}>
-            <Text style={[styles.viewProfileText, { color: theme.primary }]}>Edit Professional Profile</Text>
-            <Ionicons name="arrow-forward" size={14} color={theme.primary} />
+            <Ionicons name="chevron-forward" size={16} color={theme.primary} />
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Insights & Lists */}
-        <Animated.View style={[styles.listContainer, { transform: [{ translateY: listSildeAnim }] }]}>
-          <Text style={[styles.sectionLabel, { color: theme.subText }]}>Insights</Text>
-          
-          <ActivityChart theme={theme} />
-
-          <ListItem icon="notifications-outline" title="Notifications" badge="4" color="#0EA5E9" />
-          <ListItem icon="heart-outline" title="Favorites" extra="12 items" color="#EF4444" />
-          
-          <Text style={[styles.sectionLabel, { marginTop: 25, color: theme.subText }]}>Settings</Text>
-          <ListItem icon="shield-checkmark-outline" title="Privacy & Security" />
-          <ListItem icon="color-palette-outline" title="Appearance" extra="Light Mode" />
-
-          <AnimatedButton onPress={() => toggleLogoutModal(true)} style={[styles.logoutItem, { backgroundColor: theme.red + '10', borderColor: theme.red + '20' }]}>
-            <View style={styles.logoutIcon}>
-              <Ionicons name="log-out-outline" size={22} color={theme.red} />
+        <Animated.View
+          style={[
+            styles.pageContent,
+            {
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          <View style={[styles.sectionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>My Orders</Text>
+              <TouchableOpacity>
+                <Text style={[styles.sectionLink, { color: theme.primary }]}>View All</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={[styles.logoutText, { color: theme.red }]}>Sign Out</Text>
+
+            <View style={styles.orderIconsRow}>
+              <OrderIconItem icon="credit-card-outline" label="To Pay" value="2" color={theme.primary} theme={theme} />
+              <OrderIconItem icon="package-variant" label="To Ship" value="5" color={theme.secondary} theme={theme} />
+              <OrderIconItem icon="truck-delivery-outline" label="To Receive" value="1" color={theme.gold} theme={theme} />
+              <OrderIconItem icon="star-outline" label="To Review" value="8" color={theme.green} theme={theme} />
+              <OrderIconItem icon="archive-arrow-undo-outline" label="Refunds" value="" color={theme.orange} theme={theme} />
+            </View>
+          </View>
+
+          <View style={[styles.sectionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Tools</Text>
+            </View>
+
+            <View style={styles.toolsGrid}>
+              <ToolItem icon="wallet-outline" label="Wallet" color={theme.primary} theme={theme} />
+              <ToolItem icon="ticket-outline" label="Coupons" color={theme.gold} theme={theme} />
+              <ToolItem icon="gift-outline" label="Coins" color={theme.orange} theme={theme} />
+              <ToolItem icon="heart-outline" label="Wishlist" color={theme.red} theme={theme} />
+              <ToolItem icon="location-outline" label="Address" color={theme.secondary} theme={theme} />
+              <ToolItem icon="time-outline" label="Recently Viewed" color={theme.orange} theme={theme} />
+              <ToolItem icon="card-outline" label="Cards" color={theme.primary} theme={theme} />
+              <ToolItem icon="shield-checkmark-outline" label="Security" color={theme.green} theme={theme} />
+            </View>
+          </View>
+
+          <View style={styles.promoCardsRow}>
+            <AnimatedButton
+              style={[
+                styles.promoCard,
+                { backgroundColor: theme.primary },
+              ]}
+            >
+              <Text style={styles.promoTag}>FLASH SALE</Text>
+              <Text style={styles.promoTitle}>Up to 60% Off</Text>
+              <Text style={styles.promoDesc}>Big daily savings on gadgets and fashion</Text>
+            </AnimatedButton>
+
+            <AnimatedButton
+              style={[
+                styles.promoCard,
+                { backgroundColor: theme.secondary },
+              ]}
+            >
+              <Text style={styles.promoTag}>NEW USER</Text>
+              <Text style={styles.promoTitle}>Free Shipping</Text>
+              <Text style={styles.promoDesc}>Selected stores with discount delivery</Text>
+            </AnimatedButton>
+          </View>
+
+          <View style={styles.sectionHeaderSpace}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Services</Text>
+          </View>
+
+          <RowItem
+            icon="notifications-outline"
+            title="Notifications"
+            extra="4 unread updates"
+            color={theme.secondary}
+            theme={theme}
+          />
+          <RowItem
+            icon="chatbubble-ellipses-outline"
+            title="Help Center"
+            extra="Buyer protection and support"
+            color={theme.primary}
+            theme={theme}
+          />
+          <RowItem
+            icon="settings-outline"
+            title="Settings"
+            extra="Manage account and preferences"
+            color={theme.orange}
+            theme={theme}
+          />
+          <RowItem
+            icon="shield-checkmark-outline"
+            title="Privacy & Security"
+            extra="Protect your account"
+            color={theme.green}
+            theme={theme}
+          />
+
+          <AnimatedButton
+            onPress={() => toggleLogoutModal(true)}
+            style={[
+              styles.logoutCard,
+              {
+                backgroundColor: theme.card,
+                borderColor: '#FECACA',
+              },
+            ]}
+          >
+            <View style={styles.logoutLeft}>
+              <View style={[styles.logoutIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                <Ionicons name="log-out-outline" size={18} color={theme.red} />
+              </View>
+              <Text style={[styles.logoutTitle, { color: theme.red }]}>Sign Out</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={theme.red} />
           </AnimatedButton>
+
+          <View style={styles.sectionHeaderSpace}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Recommended For You</Text>
+            <TouchableOpacity>
+              <Text style={[styles.sectionLink, { color: theme.primary }]}>More</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.productGrid}>
+            {recommendedProducts.map((item) => (
+              <ProductCard key={item.id} item={item} theme={theme} />
+            ))}
+          </View>
         </Animated.View>
       </ScrollView>
 
-      {/* Logout Animated Sheet */}
       <Modal visible={isLogoutVisible} transparent animationType="none">
         <Pressable style={styles.modalOverlay} onPress={() => toggleLogoutModal(false)}>
-          <Animated.View style={[styles.bottomSheet, { backgroundColor: theme.card, transform: [{ translateY: modalY }] }]}>
-            <View style={[styles.handle, { backgroundColor: theme.border }]} />
-            <View style={styles.modalContent}>
-              <View style={[styles.logoutGraphic, { backgroundColor: theme.red + '10' }]}>
-                <Ionicons name="alert-circle" size={50} color={theme.red} />
+          <Animated.View
+            style={[
+              styles.bottomSheet,
+              {
+                backgroundColor: theme.card,
+                transform: [{ translateY: modalY }],
+              },
+            ]}
+          >
+            <View style={[styles.sheetHandle, { backgroundColor: theme.border }]} />
+            <View style={styles.sheetContent}>
+              <View style={[styles.sheetIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                <Ionicons name="alert-circle" size={48} color={theme.red} />
               </View>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Signing out?</Text>
-              <Text style={[styles.modalSub, { color: theme.subText }]}>You’ll miss out on your daily personalized offers and flash sale alerts.</Text>
-              
-              <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: theme.red }]} onPress={() => setLogoutVisible(false)}>
-                <Text style={styles.confirmBtnText}>Yes, Logout</Text>
+
+              <Text style={[styles.sheetTitle, { color: theme.text }]}>Sign out now?</Text>
+              <Text style={[styles.sheetText, { color: theme.subText }]}>
+                You will need to sign in again to access your orders, coupons, wallet, and saved items.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.confirmBtn, { backgroundColor: theme.red }]}
+                onPress={() => setLogoutVisible(false)}
+              >
+                <Text style={styles.confirmBtnText}>Yes, Sign Out</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.border }]} onPress={() => toggleLogoutModal(false)}>
+
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: theme.border }]}
+                onPress={() => toggleLogoutModal(false)}
+              >
                 <Text style={[styles.cancelBtnText, { color: theme.text }]}>Stay Logged In</Text>
               </TouchableOpacity>
             </View>
@@ -227,64 +528,543 @@ export default function PremiumMenuScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  headerBg: { position: 'absolute', top: 0, width: '100%', height: 260, borderBottomLeftRadius: 40, borderBottomRightRadius: 40 },
-  headerNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 50 : 40, marginBottom: 20 },
-  headerTitle: { color: 'white', fontSize: 22, fontWeight: '900' },
-  
-  userCard: { marginHorizontal: 20, borderRadius: 28, padding: 20, elevation: 15, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 20 },
-  userRow: { flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 64, height: 64, borderRadius: 32, borderWidth: 3 },
-  activeDot: { position: 'absolute', bottom: 2, right: 2, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
-  userInfo: { flex: 1, marginLeft: 15 },
-  nameRow: { flexDirection: 'row', alignItems: 'center' },
-  userName: { fontSize: 18, fontWeight: '800' },
-  proBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 8 },
-  proText: { color: '#D97706', fontSize: 10, fontWeight: '900' },
-  userPhone: { fontSize: 13, marginTop: 4 },
+  container: {
+    flex: 1,
+  },
 
-  statsContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20, paddingVertical: 15, borderRadius: 20 },
-  statBox: { alignItems: 'center', flex: 1 },
-  statValue: { fontSize: 16, fontWeight: '900' },
-  statLabel: { fontSize: 11, marginTop: 2, fontWeight: '600' },
-  statDivider: { width: 1, height: '60%', alignSelf: 'center' },
+  headerWrap: {
+    paddingTop: Platform.OS === 'ios' ? 20 : 38,
+    paddingHorizontal: 14,
+    paddingBottom: 26,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+  },
 
-  viewProfileLine: { flexDirection: 'row', alignItems: 'center', marginTop: 15, paddingTop: 15, borderTopWidth: 1 },
-  viewProfileText: { fontWeight: '700', fontSize: 13, marginRight: 5 },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
 
-  chartContainer: { padding: 18, borderRadius: 24, marginBottom: 15, borderWidth: 1 },
-  chartTitle: { fontSize: 14, fontWeight: '800' },
-  growthBadge: { backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  growthText: { color: '#16A34A', fontSize: 10, fontWeight: '900' },
-  chartBarsArea: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 100 },
-  barWrapper: { alignItems: 'center', width: '10%' },
-  bar: { width: 8, borderRadius: 4, marginBottom: 8 },
-  barLabel: { fontSize: 10, fontWeight: '700' },
+  headerRightIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
 
-  listContainer: { paddingHorizontal: 20, marginTop: 35 },
-  sectionLabel: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 12, marginLeft: 5 },
-  listItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 20, marginBottom: 10, borderWidth: 1 },
-  listLeft: { flexDirection: 'row', alignItems: 'center' },
-  listIconCircle: { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  listTitle: { fontSize: 15, fontWeight: '600', marginLeft: 12 },
-  listRight: { flexDirection: 'row', alignItems: 'center' },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginRight: 8 },
-  badgeText: { color: 'white', fontSize: 11, fontWeight: 'bold' },
-  extraText: { fontSize: 12, marginRight: 8, fontWeight: '600' },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
-  logoutItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, marginTop: 20, borderWidth: 1 },
-  logoutIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center' },
-  logoutText: { fontSize: 16, fontWeight: '800', marginLeft: 15 },
+  accountMiniBar: {
+    marginTop: 18,
+  },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  bottomSheet: { borderTopLeftRadius: 35, borderTopRightRadius: 35, padding: 25, paddingBottom: 40 },
-  handle: { width: 40, height: 5, borderRadius: 10, alignSelf: 'center', marginBottom: 20 },
-  modalContent: { alignItems: 'center' },
-  logoutGraphic: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 22, fontWeight: '900', marginBottom: 10 },
-  modalSub: { fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 30, paddingHorizontal: 20 },
-  confirmBtn: { width: '100%', padding: 18, borderRadius: 20, alignItems: 'center', marginBottom: 12 },
-  confirmBtnText: { color: 'white', fontSize: 16, fontWeight: '800' },
-  cancelBtn: { width: '100%', padding: 18, borderRadius: 20, alignItems: 'center', borderWidth: 1 },
-  cancelBtnText: { fontSize: 16, fontWeight: '700' },
+  accountMiniTitle: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+
+  accountMiniSub: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+
+  profileCard: {
+    marginHorizontal: 14,
+    borderRadius: 20,
+    padding: 15,
+    marginTop: 10,
+    elevation: 10,
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+  },
+
+  profileRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+
+  profileLeft: {
+    flexDirection: 'row',
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  avatar: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+  },
+
+  profileInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  profileNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+
+  profileName: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+
+  goldTag: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 7,
+    marginLeft: 8,
+  },
+
+  goldTagText: {
+    color: '#B45309',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  profileHandle: {
+    fontSize: 13,
+    marginTop: 4,
+    fontWeight: '700',
+  },
+
+  profileSubText: {
+    fontSize: 11,
+    marginTop: 3,
+  },
+
+  editProfileBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  profileStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    paddingTop: 2,
+    paddingBottom: 4,
+  },
+
+  profileStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  profileStatValue: {
+    fontSize: 15,
+    fontWeight: '900',
+  },
+
+  profileStatLabel: {
+    fontSize: 11,
+    marginTop: 3,
+    fontWeight: '700',
+  },
+
+  profileDivider: {
+    width: 1,
+    height: 28,
+  },
+
+  memberBanner: {
+    marginTop: 14,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  memberBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+
+  memberBannerIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+
+  memberBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  memberBannerSubTitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  pageContent: {
+    paddingHorizontal: 14,
+    marginTop: 14,
+  },
+
+  sectionCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+  },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+
+  sectionHeaderSpace: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 12,
+  },
+
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+
+  sectionLink: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  orderIconsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+
+  orderIconItem: {
+    width: (width - 56) / 5,
+    alignItems: 'center',
+  },
+
+  orderIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    marginBottom: 8,
+  },
+
+  orderBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+
+  orderBadgeText: {
+    color: 'white',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  orderIconLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+
+  toolsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+
+  toolItem: {
+    width: (width - 56) / 4,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+
+  toolCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+
+  toolText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 15,
+  },
+
+  promoCardsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+
+  promoCard: {
+    width: (width - 34) / 2,
+    minHeight: 118,
+    borderRadius: 18,
+    padding: 14,
+    justifyContent: 'space-between',
+  },
+
+  promoTag: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  promoTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 8,
+  },
+
+  promoDesc: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+
+  rowItem: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  rowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+
+  rowIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+
+  rowTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  rowExtra: {
+    fontSize: 11,
+    marginTop: 3,
+    fontWeight: '600',
+  },
+
+  logoutCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginTop: 4,
+    marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  logoutLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  logoutIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+
+  logoutTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  productGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+
+  productCard: {
+    width: (width - 34) / 2,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+
+  productImage: {
+    width: '100%',
+    height: 150,
+  },
+
+  productInfo: {
+    padding: 10,
+  },
+
+  productName: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    minHeight: 36,
+  },
+
+  productPrice: {
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 8,
+  },
+
+  productOldPrice: {
+    fontSize: 11,
+    textDecorationLine: 'line-through',
+    marginTop: 2,
+  },
+
+  productMetaRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  productSold: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  cartMiniBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    justifyContent: 'flex-end',
+  },
+
+  bottomSheet: {
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 24,
+    paddingBottom: 34,
+  },
+
+  sheetHandle: {
+    width: 40,
+    height: 5,
+    borderRadius: 10,
+    alignSelf: 'center',
+    marginBottom: 18,
+  },
+
+  sheetContent: {
+    alignItems: 'center',
+  },
+
+  sheetIconWrap: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+
+  sheetTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+
+  sheetText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 28,
+    paddingHorizontal: 12,
+  },
+
+  confirmBtn: {
+    width: '100%',
+    padding: 17,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+
+  confirmBtnText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+
+  cancelBtn: {
+    width: '100%',
+    padding: 17,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+
+  cancelBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });

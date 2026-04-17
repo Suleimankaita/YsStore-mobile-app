@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { 
   Animated,
   FlatList,
   KeyboardAvoidingView,
@@ -18,16 +18,18 @@ import { getStates, getLGAsByState } from '@some19ice/nigeria-geo-core';
 import AuthInput from '@/components/AuthInputs';
 import PrimaryButton from '@/components/PrimaryButton';
 import ScreenFadeWrapper from '@/components/ui/screenwrapper';
+import { useCompanyRegsMutation } from '@/Features/api/AdminSlice';
 import { router } from 'expo-router';
-import { useAuthRegsMutation } from '@/Features/api/UserSlice';
+import { useAuthRegsMutation, } from '@/Features/api/UserSlice';
 import * as location from "expo-location";
-
+import { useAdminLoginMutation,useAdminregisterMutation } from '@/Features/api/AdminSlice';
 const SKY = 'skyblue';
 const TOMATO = 'tomato';
 
 const AdminLoginScreen = ({ localStorages = {} }) => {
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const [UserRegs,{isLoading,isSuccess,error,isError}]=useAuthRegsMutation()
+  const [AdminRegs,{isLoading,isSuccess,error,isError}]=useAdminregisterMutation()
+  const [companyRegs,{isLoading:IsComloading,isSuccess:IscomSucess,isError:isComError,error:errorCom}]=useCompanyRegsMutation()
   const initialRegisterForm = useMemo(
     () => ({
       username: localStorages?.username || '',
@@ -178,9 +180,20 @@ const AdminLoginScreen = ({ localStorages = {} }) => {
     setRegisterForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleLogin = () => {
+  const handleLogin = useCallback(() => {
     console.log('Admin login', loginForm);
-  };
+  },[isSuccess,registerForm?.username,registerForm?.password]);
+
+
+  const handleCreateCom=useCallback(()=>{},[]);
+  
+
+  useEffect(()=>{
+    if(isSuccess){
+      handleLogin()
+      handleCreateCom()
+    }
+  },[isSuccess,handleLogin,])
 
   const handleRegister = async() => {
     try{
@@ -195,10 +208,11 @@ const AdminLoginScreen = ({ localStorages = {} }) => {
           Long: registerForm?.long,
           Email: registerForm?.email,
         };
-        const complete=await UserRegs(payload).unwrap()
+        const complete=await AdminRegs(payload).unwrap()
 
         console.log(complete)
     }catch(err){
+      console.log(err)
       alert(err?.message||err?.data?.message)
     }
   };
