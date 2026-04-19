@@ -15,7 +15,11 @@ import {
   StatusBar,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { useGetUserByIdQuery } from '@/Features/api/EcomerceSlice';
 import { LinearGradient } from 'expo-linear-gradient';
+import Auth from '@/utils/Auth';
+import { router } from 'expo-router';
+import { uri } from '@/Features/api/Uri';
 
 const { width, height } = Dimensions.get('window');
 
@@ -124,8 +128,8 @@ const AnimatedButton = ({ children, onPress, style }) => {
   );
 };
 
-const OrderIconItem = ({ icon, label, value, color, theme }) => (
-  <AnimatedButton style={styles.orderIconItem}>
+const OrderIconItem = ({ icon, label, value, color, theme, onPress }) => (
+  <AnimatedButton style={styles.orderIconItem} onPress={onPress}>
     <View style={[styles.orderIconCircle, { backgroundColor: `${color}15` }]}>
       <MaterialCommunityIcons name={icon} size={22} color={color} />
       {value ? (
@@ -140,8 +144,8 @@ const OrderIconItem = ({ icon, label, value, color, theme }) => (
   </AnimatedButton>
 );
 
-const ToolItem = ({ icon, label, color, theme }) => (
-  <AnimatedButton style={styles.toolItem}>
+const ToolItem = ({ icon, label, color, theme, onPress }) => (
+  <AnimatedButton style={styles.toolItem} onPress={onPress}>
     <View style={[styles.toolCircle, { backgroundColor: `${color}14` }]}>
       <Ionicons name={icon} size={20} color={color} />
     </View>
@@ -151,7 +155,7 @@ const ToolItem = ({ icon, label, color, theme }) => (
   </AnimatedButton>
 );
 
-const ProductCard = ({ item, theme }) => (
+const ProductCard = ({ item, theme, onAddToCart }) => (
   <AnimatedButton
     style={[
       styles.productCard,
@@ -172,7 +176,10 @@ const ProductCard = ({ item, theme }) => (
 
       <View style={styles.productMetaRow}>
         <Text style={[styles.productSold, { color: theme.subText }]}>{item.sold}</Text>
-        <TouchableOpacity style={[styles.cartMiniBtn, { backgroundColor: theme.primary }]}>
+        <TouchableOpacity
+          style={[styles.cartMiniBtn, { backgroundColor: theme.primary }]}
+          onPress={() => onAddToCart?.(item)}
+        >
           <Ionicons name="cart-outline" size={14} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -180,7 +187,7 @@ const ProductCard = ({ item, theme }) => (
   </AnimatedButton>
 );
 
-const RowItem = ({ icon, title, extra, color, theme }) => (
+const RowItem = ({ icon, title, extra, color, theme, onPress }) => (
   <AnimatedButton
     style={[
       styles.rowItem,
@@ -189,6 +196,7 @@ const RowItem = ({ icon, title, extra, color, theme }) => (
         borderColor: theme.border,
       },
     ]}
+    onPress={onPress}
   >
     <View style={styles.rowLeft}>
       <View style={[styles.rowIconWrap, { backgroundColor: `${color}14` }]}>
@@ -203,12 +211,51 @@ const RowItem = ({ icon, title, extra, color, theme }) => (
   </AnimatedButton>
 );
 
-export default function PremiumMenuScreen() {
+export default function PremiumMenuScreen({ navigation }) {
   const theme = useMemo(() => getTheme(), []);
+
+  const authData = Auth() ??{};
+  const {
+    Role,
+    id,
+    Username,
+    Email,
+    Firstname,
+    Lastname,
+    ProfileImage,
+    token,
+    AccessToken,
+  } = authData;
+
+
+  const {data:UserData}=useGetUserByIdQuery({id},{
+    pollingInterval: 1000,
+    refetchOnFocus: true,  
+  })
+  useEffect(()=>{
+    console.log("UserData in useEffect:", UserData);
+  },[UserData])
+
+  const isAuthenticated = Boolean(
+    (id || token || AccessToken) &&
+      (Username || Email || Firstname || Lastname) &&
+      Role
+  );
+
+  const displayName =
+    [Firstname, Lastname].filter(Boolean).join(' ') ||
+    Username ||
+    Email ||
+    'Guest User';
+
+  const displayHandle = Username
+    ? `@${Username}`
+    : Email
+    ? Email
+    : 'Sign in to access your account';
 
   const [isLogoutVisible, setLogoutVisible] = useState(false);
   const modalY = useRef(new Animated.Value(height)).current;
-
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -225,7 +272,8 @@ export default function PremiumMenuScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
+  
 
   const toggleLogoutModal = (show) => {
     if (show) {
@@ -242,6 +290,30 @@ export default function PremiumMenuScreen() {
         useNativeDriver: true,
       }).start(() => setLogoutVisible(false));
     }
+  };
+
+  const goToLogin = () => {
+    router.push('(screens)/firstLogin');
+  };
+
+  const goToRegister = () => {
+    navigation?.navigate?.('Register');
+  };
+
+  const handleProtectedAction = (screenName) => {
+    if (!isAuthenticated) {
+      goToLogin();
+      return;
+    }
+    if (screenName) {
+      navigation?.navigate?.(screenName);
+    }
+  };
+
+  const handleSignOut = () => {
+    toggleLogoutModal(false);
+    // Add your logout logic here
+    // e.g AsyncStorage.removeItem('token') / Redux dispatch / context logout
   };
 
   return (
@@ -273,8 +345,14 @@ export default function PremiumMenuScreen() {
         </View>
 
         <View style={styles.accountMiniBar}>
-          <Text style={styles.accountMiniTitle}>My Account</Text>
-          <Text style={styles.accountMiniSub}>Manage orders, wallet, coupons and settings</Text>
+          <Text style={styles.accountMiniTitle}>
+            {isAuthenticated ? 'My Account' : 'Welcome to YsStore'}
+          </Text>
+          <Text style={styles.accountMiniSub}>
+            {isAuthenticated
+              ? 'Manage orders, wallet, coupons and settings'
+              : 'Sign in or create an account to enjoy orders, wallet and saved items'}
+          </Text>
         </View>
       </LinearGradient>
 
@@ -293,62 +371,129 @@ export default function PremiumMenuScreen() {
             },
           ]}
         >
-          <View style={styles.profileRow}>
-            <View style={styles.profileLeft}>
-              <Image
-                source={{ uri: 'https://i.pravatar.cc/150?u=ysstore-user' }}
-                style={styles.avatar}
-              />
-              <View style={styles.profileInfo}>
-                <View style={styles.profileNameRow}>
-                  <Text style={[styles.profileName, { color: theme.text }]}>John Adam</Text>
-                  <View style={styles.goldTag}>
-                    <Text style={styles.goldTagText}>Gold</Text>
+          {isAuthenticated ? (
+            <>
+              <View style={styles.profileRow}>
+                <View style={styles.profileLeft}>
+                  <Image
+                    source={{
+                      uri:
+                      UserData?.data?.img?.length ?
+                        `${uri}/img/${UserData?.data?.img}`:
+                        'https://i.pravatar.cc/150?u=ysstore-user',
+                    }}
+                    style={styles.avatar}
+                  />
+                  <View style={styles.profileInfo}>
+                    <View style={styles.profileNameRow}>
+                      <Text style={[styles.profileName, { color: theme.text }]}>
+                        {displayName}
+                      </Text>
+                      <View style={styles.goldTag}>
+                        <Text style={styles.goldTagText}>
+                          {Role || 'Member'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.profileHandle, { color: theme.subText }]}>
+                      {displayHandle}
+                    </Text>
+                    <Text style={[styles.profileSubText, { color: theme.subText }]}>
+                      Access granted • Account active
+                    </Text>
                   </View>
                 </View>
-                <Text style={[styles.profileHandle, { color: theme.subText }]}>@john_creative</Text>
-                <Text style={[styles.profileSubText, { color: theme.subText }]}>
-                  Member since 2024
+
+                <TouchableOpacity
+                  style={[styles.editProfileBtn, { backgroundColor: theme.softBlue }]}
+                  onPress={() => handleProtectedAction('Profile')}
+                >
+                  <Feather name="edit-2" size={15} color={theme.secondary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.profileStatsRow}>
+                <View style={styles.profileStat}>
+                  <Text style={[styles.profileStatValue, { color: theme.text }]}>1,240</Text>
+                  <Text style={[styles.profileStatLabel, { color: theme.subText }]}>Points</Text>
+                </View>
+                <View style={[styles.profileDivider, { backgroundColor: theme.border }]} />
+                <View style={styles.profileStat}>
+                  <Text style={[styles.profileStatValue, { color: theme.text }]}>₦25,400</Text>
+                  <Text style={[styles.profileStatLabel, { color: theme.subText }]}>Wallet</Text>
+                </View>
+                <View style={[styles.profileDivider, { backgroundColor: theme.border }]} />
+                <View style={styles.profileStat}>
+                  <Text style={[styles.profileStatValue, { color: theme.text }]}>6</Text>
+                  <Text style={[styles.profileStatLabel, { color: theme.subText }]}>Coupons</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.memberBanner, { backgroundColor: theme.softOrange }]}
+                onPress={() => handleProtectedAction('Membership')}
+              >
+                <View style={styles.memberBannerLeft}>
+                  <View style={[styles.memberBannerIcon, { backgroundColor: theme.primary }]}>
+                    <Ionicons name="diamond-outline" size={15} color="white" />
+                  </View>
+                  <View>
+                    <Text style={[styles.memberBannerTitle, { color: theme.text }]}>
+                      Member Benefits
+                    </Text>
+                    <Text
+                      style={[styles.memberBannerSubTitle, { color: theme.subText }]}
+                    >
+                      Special discounts and premium offers
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={theme.primary} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <View style={styles.guestHeader}>
+                <View style={[styles.guestAvatarWrap, { backgroundColor: theme.softBlue }]}>
+                  <Ionicons name="person-outline" size={30} color={theme.secondary} />
+                </View>
+
+                <View style={styles.guestTextWrap}>
+                  <Text style={[styles.guestTitle, { color: theme.text }]}>
+                    Sign in to continue
+                  </Text>
+                  <Text style={[styles.guestSubtitle, { color: theme.subText }]}>
+                    Access your cart, orders, wishlist, wallet and personalized offers.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.authButtonsRow}>
+                <TouchableOpacity
+                  style={[styles.signInBtn, { backgroundColor: theme.primary }]}
+                  onPress={goToLogin}
+                >
+                  <Text style={styles.signInBtnText}>Sign In</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.signUpBtn, { borderColor: theme.secondary }]}
+                  onPress={goToRegister}
+                >
+                  <Text style={[styles.signUpBtnText, { color: theme.secondary }]}>
+                    Sign Up
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.guestMiniInfo, { backgroundColor: theme.softOrange }]}>
+                <Ionicons name="shield-checkmark-outline" size={18} color={theme.primary} />
+                <Text style={[styles.guestMiniInfoText, { color: theme.text }]}>
+                  Safe checkout, saved delivery details, order tracking and better shopping experience.
                 </Text>
               </View>
-            </View>
-
-            <TouchableOpacity style={[styles.editProfileBtn, { backgroundColor: theme.softBlue }]}>
-              <Feather name="edit-2" size={15} color={theme.secondary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.profileStatsRow}>
-            <View style={styles.profileStat}>
-              <Text style={[styles.profileStatValue, { color: theme.text }]}>1,240</Text>
-              <Text style={[styles.profileStatLabel, { color: theme.subText }]}>Points</Text>
-            </View>
-            <View style={[styles.profileDivider, { backgroundColor: theme.border }]} />
-            <View style={styles.profileStat}>
-              <Text style={[styles.profileStatValue, { color: theme.text }]}>₦25,400</Text>
-              <Text style={[styles.profileStatLabel, { color: theme.subText }]}>Wallet</Text>
-            </View>
-            <View style={[styles.profileDivider, { backgroundColor: theme.border }]} />
-            <View style={styles.profileStat}>
-              <Text style={[styles.profileStatValue, { color: theme.text }]}>6</Text>
-              <Text style={[styles.profileStatLabel, { color: theme.subText }]}>Coupons</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity style={[styles.memberBanner, { backgroundColor: theme.softOrange }]}>
-            <View style={styles.memberBannerLeft}>
-              <View style={[styles.memberBannerIcon, { backgroundColor: theme.primary }]}>
-                <Ionicons name="diamond-outline" size={15} color="white" />
-              </View>
-              <View>
-                <Text style={[styles.memberBannerTitle, { color: theme.text }]}>Member Benefits</Text>
-                <Text style={[styles.memberBannerSubTitle, { color: theme.subText }]}>
-                  Special discounts and premium offers
-                </Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={theme.primary} />
-          </TouchableOpacity>
+            </>
+          )}
         </Animated.View>
 
         <Animated.View
@@ -359,39 +504,125 @@ export default function PremiumMenuScreen() {
             },
           ]}
         >
-          <View style={[styles.sectionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>My Orders</Text>
-              <TouchableOpacity>
-                <Text style={[styles.sectionLink, { color: theme.primary }]}>View All</Text>
-              </TouchableOpacity>
-            </View>
+          {isAuthenticated ? (
+            <>
+              <View
+                style={[
+                  styles.sectionCard,
+                  { backgroundColor: theme.card, borderColor: theme.border },
+                ]}
+              >
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>My Orders</Text>
+                  <TouchableOpacity onPress={() => handleProtectedAction('Orders')}>
+                    <Text style={[styles.sectionLink, { color: theme.primary }]}>View All</Text>
+                  </TouchableOpacity>
+                </View>
 
-            <View style={styles.orderIconsRow}>
-              <OrderIconItem icon="credit-card-outline" label="To Pay" value="2" color={theme.primary} theme={theme} />
-              <OrderIconItem icon="package-variant" label="To Ship" value="5" color={theme.secondary} theme={theme} />
-              <OrderIconItem icon="truck-delivery-outline" label="To Receive" value="1" color={theme.gold} theme={theme} />
-              <OrderIconItem icon="star-outline" label="To Review" value="8" color={theme.green} theme={theme} />
-              <OrderIconItem icon="archive-arrow-undo-outline" label="Refunds" value="" color={theme.orange} theme={theme} />
-            </View>
-          </View>
+                <View style={styles.orderIconsRow}>
+                  <OrderIconItem
+                    icon="credit-card-outline"
+                    label="To Pay"
+                    value="2"
+                    color={theme.primary}
+                    theme={theme}
+                    onPress={() => handleProtectedAction('Orders')}
+                  />
+                  <OrderIconItem
+                    icon="package-variant"
+                    label="To Ship"
+                    value="5"
+                    color={theme.secondary}
+                    theme={theme}
+                    onPress={() => handleProtectedAction('Orders')}
+                  />
+                  <OrderIconItem
+                    icon="truck-delivery-outline"
+                    label="To Receive"
+                    value="1"
+                    color={theme.gold}
+                    theme={theme}
+                    onPress={() => handleProtectedAction('Orders')}
+                  />
+                  <OrderIconItem
+                    icon="star-outline"
+                    label="To Review"
+                    value="8"
+                    color={theme.green}
+                    theme={theme}
+                    onPress={() => handleProtectedAction('Orders')}
+                  />
+                  <OrderIconItem
+                    icon="archive-arrow-undo-outline"
+                    label="Refunds"
+                    value=""
+                    color={theme.orange}
+                    theme={theme}
+                    onPress={() => handleProtectedAction('Refunds')}
+                  />
+                </View>
+              </View>
 
-          <View style={[styles.sectionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>Tools</Text>
-            </View>
+              <View
+                style={[
+                  styles.sectionCard,
+                  { backgroundColor: theme.card, borderColor: theme.border },
+                ]}
+              >
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>Tools</Text>
+                </View>
 
-            <View style={styles.toolsGrid}>
-              <ToolItem icon="wallet-outline" label="Wallet" color={theme.primary} theme={theme} />
-              <ToolItem icon="ticket-outline" label="Coupons" color={theme.gold} theme={theme} />
-              <ToolItem icon="gift-outline" label="Coins" color={theme.orange} theme={theme} />
-              <ToolItem icon="heart-outline" label="Wishlist" color={theme.red} theme={theme} />
-              <ToolItem icon="location-outline" label="Address" color={theme.secondary} theme={theme} />
-              <ToolItem icon="time-outline" label="Recently Viewed" color={theme.orange} theme={theme} />
-              <ToolItem icon="card-outline" label="Cards" color={theme.primary} theme={theme} />
-              <ToolItem icon="shield-checkmark-outline" label="Security" color={theme.green} theme={theme} />
+                <View style={styles.toolsGrid}>
+                  <ToolItem icon="wallet-outline" label="Wallet" color={theme.primary} theme={theme} onPress={() => handleProtectedAction('Wallet')} />
+                  <ToolItem icon="ticket-outline" label="Coupons" color={theme.gold} theme={theme} onPress={() => handleProtectedAction('Coupons')} />
+                  <ToolItem icon="gift-outline" label="Coins" color={theme.orange} theme={theme} onPress={() => handleProtectedAction('Coins')} />
+                  <ToolItem icon="heart-outline" label="Wishlist" color={theme.red} theme={theme} onPress={() => handleProtectedAction('Wishlist')} />
+                  <ToolItem icon="location-outline" label="Address" color={theme.secondary} theme={theme} onPress={() => handleProtectedAction('Address')} />
+                  <ToolItem icon="time-outline" label="Recently Viewed" color={theme.orange} theme={theme} onPress={() => handleProtectedAction('RecentlyViewed')} />
+                  <ToolItem icon="card-outline" label="Cards" color={theme.primary} theme={theme} onPress={() => handleProtectedAction('Cards')} />
+                  <ToolItem icon="shield-checkmark-outline" label="Security" color={theme.green} theme={theme} onPress={() => handleProtectedAction('Security')} />
+                </View>
+              </View>
+            </>
+          ) : (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Quick Access</Text>
+              </View>
+
+              <View style={styles.guestQuickGrid}>
+                <TouchableOpacity
+                  style={[styles.guestQuickItem, { backgroundColor: theme.softBlue }]}
+                  onPress={goToLogin}
+                >
+                  <Ionicons name="cart-outline" size={22} color={theme.secondary} />
+                  <Text style={[styles.guestQuickText, { color: theme.text }]}>My Cart</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.guestQuickItem, { backgroundColor: theme.softOrange }]}
+                  onPress={goToLogin}
+                >
+                  <Ionicons name="bag-handle-outline" size={22} color={theme.primary} />
+                  <Text style={[styles.guestQuickText, { color: theme.text }]}>My Orders</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.guestQuickItem, { backgroundColor: '#FEE2E2' }]}
+                  onPress={goToRegister}
+                >
+                  <Ionicons name="person-add-outline" size={22} color={theme.red} />
+                  <Text style={[styles.guestQuickText, { color: theme.text }]}>Create Account</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
 
           <View style={styles.promoCardsRow}>
             <AnimatedButton
@@ -424,9 +655,10 @@ export default function PremiumMenuScreen() {
           <RowItem
             icon="notifications-outline"
             title="Notifications"
-            extra="4 unread updates"
+            extra={isAuthenticated ? '4 unread updates' : 'Sign in to receive updates'}
             color={theme.secondary}
             theme={theme}
+            onPress={() => handleProtectedAction('Notifications')}
           />
           <RowItem
             icon="chatbubble-ellipses-outline"
@@ -434,6 +666,7 @@ export default function PremiumMenuScreen() {
             extra="Buyer protection and support"
             color={theme.primary}
             theme={theme}
+            onPress={() => navigation?.navigate?.('HelpCenter')}
           />
           <RowItem
             icon="settings-outline"
@@ -441,6 +674,7 @@ export default function PremiumMenuScreen() {
             extra="Manage account and preferences"
             color={theme.orange}
             theme={theme}
+            onPress={() => handleProtectedAction('Settings')}
           />
           <RowItem
             icon="shield-checkmark-outline"
@@ -448,26 +682,29 @@ export default function PremiumMenuScreen() {
             extra="Protect your account"
             color={theme.green}
             theme={theme}
+            onPress={() => handleProtectedAction('Security')}
           />
 
-          <AnimatedButton
-            onPress={() => toggleLogoutModal(true)}
-            style={[
-              styles.logoutCard,
-              {
-                backgroundColor: theme.card,
-                borderColor: '#FECACA',
-              },
-            ]}
-          >
-            <View style={styles.logoutLeft}>
-              <View style={[styles.logoutIconWrap, { backgroundColor: '#FEE2E2' }]}>
-                <Ionicons name="log-out-outline" size={18} color={theme.red} />
+          {isAuthenticated ? (
+            <AnimatedButton
+              onPress={() => toggleLogoutModal(true)}
+              style={[
+                styles.logoutCard,
+                {
+                  backgroundColor: theme.card,
+                  borderColor: '#FECACA',
+                },
+              ]}
+            >
+              <View style={styles.logoutLeft}>
+                <View style={[styles.logoutIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                  <Ionicons name="log-out-outline" size={18} color={theme.red} />
+                </View>
+                <Text style={[styles.logoutTitle, { color: theme.red }]}>Sign Out</Text>
               </View>
-              <Text style={[styles.logoutTitle, { color: theme.red }]}>Sign Out</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={theme.red} />
-          </AnimatedButton>
+              <Ionicons name="chevron-forward" size={16} color={theme.red} />
+            </AnimatedButton>
+          ) : null}
 
           <View style={styles.sectionHeaderSpace}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Recommended For You</Text>
@@ -478,7 +715,17 @@ export default function PremiumMenuScreen() {
 
           <View style={styles.productGrid}>
             {recommendedProducts.map((item) => (
-              <ProductCard key={item.id} item={item} theme={theme} />
+              <ProductCard
+                key={item.id}
+                item={item}
+                theme={theme}
+                onAddToCart={() => {
+                  if (!isAuthenticated) {
+                    goToLogin();
+                    return;
+                  }
+                }}
+              />
             ))}
           </View>
         </Animated.View>
@@ -508,7 +755,7 @@ export default function PremiumMenuScreen() {
 
               <TouchableOpacity
                 style={[styles.confirmBtn, { backgroundColor: theme.red }]}
-                onPress={() => setLogoutVisible(false)}
+                onPress={handleSignOut}
               >
                 <Text style={styles.confirmBtnText}>Yes, Sign Out</Text>
               </TouchableOpacity>
@@ -634,6 +881,7 @@ const styles = StyleSheet.create({
     color: '#B45309',
     fontSize: 10,
     fontWeight: '900',
+    textTransform: 'capitalize',
   },
 
   profileHandle: {
@@ -708,16 +956,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
-  },
-
-  memberBannerTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-
-  memberBannerSubTitle: {
-    fontSize: 11,
-    marginTop: 2,
   },
 
   pageContent: {
@@ -1066,5 +1304,109 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     fontSize: 15,
     fontWeight: '700',
+  },
+
+  guestHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  guestAvatarWrap: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  guestTextWrap: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  guestTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+
+  guestSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+
+  authButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+
+  signInBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  signInBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  signUpBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    backgroundColor: '#fff',
+  },
+
+  signUpBtnText: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  guestMiniInfo: {
+    marginTop: 14,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+
+  guestMiniInfoText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+
+  guestQuickGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+
+  guestQuickItem: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  guestQuickText: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

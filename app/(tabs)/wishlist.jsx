@@ -10,6 +10,7 @@ import {
   StatusBar,
   Dimensions,
   Alert,
+  Platform,
 } from "react-native";
 import SaveItem from "@/utils/SaveItem";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -398,7 +399,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop:Platform.OS === 'ios' ? 10 : '6%',
     paddingBottom: 28,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,

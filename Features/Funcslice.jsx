@@ -1,5 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
 const initialState = {
   toggle: false,
   id:'',
@@ -10,6 +10,7 @@ const initialState = {
   Role: null,
   UserDetails: {},
   router: null,
+  GetData:null
 };
 
 const Funcslice = createSlice({
@@ -144,7 +145,32 @@ const Funcslice = createSlice({
     },
     SetRouter: (state, action) => {
       state.router = action.payload;
-    }
+    },
+    SaveData:async(state, action)=> {
+      const { name, data } = action.payload;
+      try{
+
+        AsyncStorage.setItem(name, JSON.stringify(data));
+      }catch(err){
+        alert(err.message)
+      }
+    },
+    GetData:async(state, action)=>{
+        try{
+          const name=action.payload
+                console.log("name: ",name)
+            const data=await AsyncStorage.getItem(name)
+            
+                    if(data){
+                        return JSON.parse(data);
+                    }else{
+                        return [];
+                    }
+                }catch(err){
+                    alert(err.message)
+                }
+        
+        }
   },
 });
 
@@ -163,6 +189,7 @@ export const {
   AddCart,
   ClearCart,
   RemoveItem,
+GetData
 } = Funcslice.actions;
 
 export const Showtoggle = (state) => state.Function.toggle;
@@ -174,5 +201,6 @@ export const GetId = (state) => state.Function.id;
 export const GetUserCart = (state) => state.Function.UserCart;
 export const GetUserDetails= (state) => state.Function.UserDetails;
 export const GetRouter = (state) => state.Function.router;
+// export const GetData = (state) => state.Function.GetData;
 
 export default Funcslice.reducer;

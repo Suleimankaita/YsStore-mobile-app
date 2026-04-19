@@ -1,13 +1,13 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView,Platform } from 'react-native';
 import 'react-native-reanimated';
 import { PaystackProvider } from 'react-native-paystack-webview';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSelector } from 'react-redux';
 import { GetRouter } from '@/Features/Funcslice';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-
 export const unstable_settings = {
 };
 
@@ -16,7 +16,8 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const route=useSelector(GetRouter)
   return (
-    < GestureHandlerRootView style={{ flex: 1 }}>
+      
+    <GestureHandlerRootView style={{ flex: 1 ,paddingTop: Platform.OS === 'ios' ? 0 : "7%"}}  >
 
     <PaystackProvider publicKey="pk_test_162884f06e28545f737d29fe112e0fd09da43cac">
       

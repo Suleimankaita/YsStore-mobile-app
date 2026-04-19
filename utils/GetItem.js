@@ -7,6 +7,7 @@ const GetItem = async(name) => {
     const data=await AsyncStorage.getItem(name)
     
             if(data){
+
                 return JSON.parse(data);
             }else{
                 return [];
