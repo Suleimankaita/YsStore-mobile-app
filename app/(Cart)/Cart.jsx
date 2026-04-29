@@ -13,12 +13,13 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useGetcartQuery ,useRemoveCardItemMutation,useUpdateProductQuantityMutation} from '@/Features/api/EcomerceSlice';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { router } from 'expo-router';
-
-const CART_STORAGE_KEY = '@ysstore_cart';
+import { useSelector } from 'react-redux';
+import { GetToken, GetUserDetails } from '@/Features/Funcslice';
+import { uri } from '@/Features/api/Uri';
 
 const getThemeColors = (colorScheme) => {
   const isDark = colorScheme === 'dark';
@@ -28,97 +29,112 @@ const getThemeColors = (colorScheme) => {
     tomatoSoft: isDark ? 'rgba(255,99,71,0.14)' : '#FFE5E0',
     skyBlue: '#38BDF8',
     skyBlueSoft: isDark ? 'rgba(56,189,248,0.14)' : '#E0F2FE',
-
     bg: isDark ? '#0B1220' : '#F8FAFC',
     card: isDark ? '#111827' : '#FFFFFF',
     cardSoft: isDark ? '#172033' : '#F8FAFC',
-
     textMain: isDark ? '#F8FAFC' : '#0F172A',
     textSub: isDark ? '#94A3B8' : '#64748B',
     border: isDark ? '#243041' : '#E2E8F0',
     line: isDark ? '#1E293B' : '#E5E7EB',
-
     success: '#10B981',
     danger: '#EF4444',
     darkBtn: '#111827',
   };
 };
 
-const INITIAL_CART = [
-  {
-    id: '1',
-    name: 'Industrial Gear Set',
-    brand: 'YS Industrial',
-    price: 85000,
-    image: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400',
-    qty: 1,
-  },
-  {
-    id: '2',
-    name: 'MacBook M3 Pro',
-    brand: 'Apple Store',
-    price: 1250000,
-    image: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400',
-    qty: 1,
-  },
-  {
-    id: '3',
-    name: 'Smart Watch 9',
-    brand: 'Samsung HQ',
-    price: 45000,
-    image: 'https://images.unsplash.com/photo-1544117518-30df578096a4?w=400',
-    qty: 2,
-  },
-];
-
 const formatCurrency = (amount) => `₦${Number(amount || 0).toLocaleString()}`;
 
+const getImageUrl = (img) => {
+  if (!img || img === '1') {
+    return 'https://via.placeholder.com/300x300.png?text=YSStore';
+  }
+
+  if (typeof img === 'string' && img.startsWith('http')) {
+    return img;
+  }
+
+  return `${uri}/${img}`;
+};
+
+const normalizeCartItem = (item, localQty = {}) => {
+  const product = item?.product || {};
+  const productImage = Array.isArray(product?.img) ? product.img[0] : '';
+  const cartId = item?._id;
+  const quantity = Number(localQty[cartId] || item?.quantity || 1);
+
+  return {
+    cartId,
+    productId: product?._id || item?.productId || item?.dealId,
+    name: item?.name || product?.name || 'Unknown product',
+    brand: product?.categoryName || 'YS Store',
+    price: Number(item?.price || item?.dealPrice || product?.soldAtPrice || product?.actualPrice || 0),
+    actualPrice: Number(item?.originalPrice || product?.actualPrice || item?.price || 0),
+    quantity,
+    img: item?.img && item.img !== '1' ? item.img : productImage,
+    product,
+    raw: item,
+  };
+};
+
 export default function CartScreen() {
+  const token = useSelector(GetToken);
+  const userDetails = useSelector(GetUserDetails);
+    const [updateQuantity] = useUpdateProductQuantityMutation();
+
+  const id = userDetails?.id || userDetails?._id;
+
+  const {
+    data: CartData,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetcartQuery(
+    { token, id },
+    {
+      pollingInterval: 1000,
+      refetchOnFocus: true,
+      skip: !token || !id,
+    }
+  );
+
   const colorScheme = useColorScheme();
   const theme = useMemo(() => getThemeColors(colorScheme), [colorScheme]);
   const styles = useMemo(() => getStyles(theme), [theme]);
-
-  const [cartItems, setCartItems] = useState([]);
+  const [deleteitem]=useRemoveCardItemMutation()
   const [coupon, setCoupon] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
-  const [loadingCart, setLoadingCart] = useState(true);
+  const [localQty, setLocalQty] = useState({});
+  const [removedIds, setRemovedIds] = useState([]);
 
   useEffect(() => {
-    const loadCart = async () => {
-      try {
-        const stored = await AsyncStorage.getItem(CART_STORAGE_KEY);
-        if (stored) {
-          setCartItems(JSON.parse(stored));
-        } else {
-          setCartItems(INITIAL_CART);
-        }
-      } catch (error) {
-        setCartItems(INITIAL_CART);
-      } finally {
-        setLoadingCart(false);
-      }
-    };
-
-    loadCart();
-  }, []);
-
-  useEffect(() => {
-    if (!loadingCart) {
-      AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems)).catch(() => {});
+    if (CartData) {
+      setRemovedIds([]);
     }
-  }, [cartItems, loadingCart]);
+  }, [CartData]);
+
+  const cartItems = useMemo(() => {
+    if (!Array.isArray(CartData)) return [];
+
+    return CartData
+      .filter((item) => !removedIds.includes(item?._id))
+      .map((item) => normalizeCartItem(item, localQty));
+  }, [CartData, localQty, removedIds]);
 
   const itemCount = useMemo(
-    () => cartItems.reduce((sum, item) => sum + item.qty, 0),
+    () => cartItems.reduce((sum, item) => sum + Number(item.quantity || 1), 0),
     [cartItems]
   );
 
   const subtotal = useMemo(
-    () => cartItems.reduce((sum, item) => sum + item.price * item.qty, 0),
+    () =>
+      cartItems.reduce(
+        (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1),
+        0
+      ),
     [cartItems]
   );
 
-  const vatAmount = subtotal * 0.04;
+  const vatAmount = useMemo(() => subtotal * 0.04, [subtotal]);
   const deliveryFee = cartItems.length > 0 ? 3500 : 0;
 
   const discountAmount = useMemo(() => {
@@ -137,17 +153,24 @@ export default function CartScreen() {
 
   const grandTotal = Math.max(0, subtotal + vatAmount + deliveryFee - discountAmount);
 
-  const updateQty = useCallback((id, delta) => {
-    setCartItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, qty: Math.max(1, item.qty + delta) }
-          : item
-      )
-    );
-  }, []);
+  const updateQty = useCallback((cartId, delta) => {
+    setLocalQty((prev) => {
+      const current = Number(prev[cartId] || 0);
+      const apiItem = Array.isArray(CartData)
+        ? CartData.find((item) => item?._id === cartId)
+        : null;
 
-  const removeItem = useCallback((id) => {
+      const baseQty = Number(apiItem?.quantity || 1);
+      const nextQty = Math.max(1, (current || baseQty) + delta);
+
+      return {
+        ...prev,
+        [cartId]: nextQty,
+      };
+    });
+  }, [CartData]);
+
+  const removeItem = useCallback((cartId,item) => {
     Alert.alert(
       'Remove item',
       'Are you sure you want to remove this item from the cart?',
@@ -156,8 +179,12 @@ export default function CartScreen() {
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => {
-            setCartItems((prev) => prev.filter((item) => item.id !== id));
+          onPress: async() => {
+            console.log(item)
+            setRemovedIds((prev) => [...prev, cartId]);
+            // const mss=await deleteitem({id})
+        const response=await deleteitem({ id, token, productId: item?.cartId, dealId: item?.product?._id, quantity: item?.product?.quantity });
+
           },
         },
       ]
@@ -169,22 +196,22 @@ export default function CartScreen() {
 
     Alert.alert(
       'Clear cart',
-      'This will remove all items from your cart.',
+      'This will remove all items from your cart on this screen.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Clear all',
           style: 'destructive',
-          onPress: async () => {
-            setCartItems([]);
+          onPress: () => {
+            const ids = cartItems.map((item) => item.cartId);
+            setRemovedIds(ids);
             setAppliedCoupon(null);
             setCoupon('');
-            await AsyncStorage.removeItem(CART_STORAGE_KEY).catch(() => {});
           },
         },
       ]
     );
-  }, [cartItems.length]);
+  }, [cartItems]);
 
   const applyCoupon = useCallback(() => {
     const code = coupon.trim().toUpperCase();
@@ -229,8 +256,9 @@ export default function CartScreen() {
     }
 
     router.push({
-      pathname: '(Checkout)/CheckOut',
+      pathname: '/(Checkout)/CheckOut',
       params: {
+        cartPayload: JSON.stringify(cartItems),
         subtotal: String(subtotal),
         vat: String(vatAmount),
         deliveryFee: String(deliveryFee),
@@ -241,7 +269,7 @@ export default function CartScreen() {
       },
     });
   }, [
-    cartItems.length,
+    cartItems,
     subtotal,
     vatAmount,
     deliveryFee,
@@ -270,11 +298,11 @@ export default function CartScreen() {
   );
 
   const renderCartItem = ({ item }) => {
-    const itemTotal = item.price * item.qty;
+    const itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
 
     return (
       <View style={styles.cartCard}>
-        <Image source={{ uri: item.image }} style={styles.itemImage} />
+        <Image source={{ uri: `${uri}/img/${item?.img}` }} style={styles.itemImage} />
 
         <View style={styles.itemDetails}>
           <View style={styles.itemTopRow}>
@@ -290,10 +318,16 @@ export default function CartScreen() {
               <Text style={styles.unitPrice}>
                 Unit Price: {formatCurrency(item.price)}
               </Text>
+
+              {item.actualPrice > item.price && (
+                <Text style={styles.oldPrice}>
+                  Old Price: {formatCurrency(item.actualPrice)}
+                </Text>
+              )}
             </View>
 
             <TouchableOpacity
-              onPress={() => removeItem(item.id)}
+              onPress={() => removeItem(item?.cartId,item)}
               style={styles.deleteBtn}
               activeOpacity={0.8}
             >
@@ -305,17 +339,30 @@ export default function CartScreen() {
             <View style={styles.qtyContainer}>
               <TouchableOpacity
                 style={styles.qtyBtn}
-                onPress={() => updateQty(item.id, -1)}
+                onPress={async() => {
+                  try{
+
+                    updateQty(item.cartId, -1)
+                    await updateQuantity({ productId: item?.cartId, quantity: -1, id, token });
+                  }catch(err){
+                    alert(err?.data?.message||err?.message)
+                  }
+
+                }}
                 activeOpacity={0.8}
               >
                 <Ionicons name="remove" size={16} color={theme.textMain} />
               </TouchableOpacity>
 
-              <Text style={styles.qtyText}>{item.qty}</Text>
+              <Text style={styles.qtyText}>{item.quantity}</Text>
 
               <TouchableOpacity
                 style={[styles.qtyBtn, styles.qtyBtnAdd]}
-                onPress={() => updateQty(item.id, 1)}
+                onPress={async() =>{ 
+                  updateQty(item.cartId, 1)
+        await updateQuantity({ productId: item?.cartId, quantity: 1, id, token });
+
+                }}
                 activeOpacity={0.8}
               >
                 <Ionicons name="add" size={16} color="#fff" />
@@ -331,17 +378,15 @@ export default function CartScreen() {
     );
   };
 
-  if (loadingCart) {
-    return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-        <ActivityIndicator size="large" color={theme.tomato} />
-        <Text style={{ marginTop: 12, color: theme.textSub, fontWeight: '700' }}>
-          Loading cart...
-        </Text>
-      </SafeAreaView>
-    );
-  }
+  // if (isLoading) {
+  //   return (
+  //     <SafeAreaView style={[styles.container, styles.center]}>
+  //       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+  //       <ActivityIndicator size="large" color={theme.tomato} />
+  //       <Text style={styles.loadingText}>Loading cart...</Text>
+  //     </SafeAreaView>
+  //   );
+  // }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -361,21 +406,27 @@ export default function CartScreen() {
 
         <TouchableOpacity
           style={styles.clearHeaderBtn}
-          onPress={clearCart}
-          disabled={!cartItems.length}
+          onPress={cartItems.length ? clearCart : refetch}
           activeOpacity={0.8}
         >
           <Ionicons
-            name="trash-outline"
+            name={cartItems.length ? 'trash-outline' : 'refresh-outline'}
             size={18}
-            color={cartItems.length ? theme.tomato : theme.textSub}
+            color={cartItems.length ? theme.tomato : theme.skyBlue}
           />
         </TouchableOpacity>
       </View>
 
+      {!isLoading && (
+        <View style={styles.syncBar}>
+          <ActivityIndicator size="small" color={theme.skyBlue} />
+          <Text style={styles.syncText}>Syncing cart...</Text>
+        </View>
+      )}
+
       <FlatList
         data={cartItems}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.cartId}
         renderItem={renderCartItem}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={EmptyCart}
@@ -470,10 +521,8 @@ export default function CartScreen() {
               onPress={handleProceedToCheckout}
               activeOpacity={0.9}
             >
-              <>
-                <Ionicons name="arrow-forward-circle-outline" size={18} color="#fff" />
-                <Text style={styles.checkoutBtnText}>Proceed to Checkout</Text>
-              </>
+              <Ionicons name="arrow-forward-circle-outline" size={18} color="#fff" />
+              <Text style={styles.checkoutBtnText}>Proceed to Checkout</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -488,7 +537,33 @@ const getStyles = (theme) =>
       flex: 1,
       backgroundColor: theme.bg,
     },
-
+    center: {
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    loadingText: {
+      marginTop: 12,
+      color: theme.textSub,
+      fontWeight: '700',
+    },
+    syncBar: {
+      marginHorizontal: 20,
+      marginBottom: 8,
+      backgroundColor: theme.card,
+      borderRadius: 14,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    syncText: {
+      color: theme.textSub,
+      fontWeight: '700',
+      fontSize: 12,
+    },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -532,12 +607,10 @@ const getStyles = (theme) =>
       borderWidth: 1,
       borderColor: theme.border,
     },
-
     listContent: {
       paddingHorizontal: 20,
       paddingBottom: 20,
     },
-
     topInfoCard: {
       backgroundColor: theme.card,
       borderRadius: 24,
@@ -558,7 +631,6 @@ const getStyles = (theme) =>
       lineHeight: 20,
       fontWeight: '600',
     },
-
     cartCard: {
       flexDirection: 'row',
       backgroundColor: theme.card,
@@ -611,6 +683,13 @@ const getStyles = (theme) =>
       color: theme.textSub,
       fontWeight: '600',
     },
+    oldPrice: {
+      marginTop: 3,
+      fontSize: 11,
+      color: theme.textSub,
+      textDecorationLine: 'line-through',
+      fontWeight: '600',
+    },
     deleteBtn: {
       width: 38,
       height: 38,
@@ -620,7 +699,6 @@ const getStyles = (theme) =>
       backgroundColor: theme.tomatoSoft,
       marginLeft: 10,
     },
-
     itemBottomRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -669,7 +747,6 @@ const getStyles = (theme) =>
       fontWeight: '900',
       color: theme.tomato,
     },
-
     emptyContainer: {
       flex: 1,
       alignItems: 'center',
@@ -716,7 +793,6 @@ const getStyles = (theme) =>
       fontWeight: '800',
       fontSize: 15,
     },
-
     footerWrap: {
       position: 'absolute',
       left: 0,
@@ -743,14 +819,12 @@ const getStyles = (theme) =>
       borderWidth: 1,
       borderColor: theme.border,
     },
-
     summaryTitle: {
       fontSize: 18,
       fontWeight: '900',
       color: theme.textMain,
       marginBottom: 14,
     },
-
     couponRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -804,7 +878,6 @@ const getStyles = (theme) =>
       fontWeight: '800',
       fontSize: 13,
     },
-
     summaryRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -821,13 +894,11 @@ const getStyles = (theme) =>
       fontSize: 14,
       fontWeight: '800',
     },
-
     divider: {
       height: 1,
       backgroundColor: theme.line,
       marginVertical: 12,
     },
-
     totalRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -850,7 +921,6 @@ const getStyles = (theme) =>
       fontWeight: '900',
       color: theme.tomato,
     },
-
     checkoutBtn: {
       height: 58,
       borderRadius: 18,

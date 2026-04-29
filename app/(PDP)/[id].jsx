@@ -1,6 +1,16 @@
+import {
+  useAddCartMutation,
+  useCreatewishlistMutation,
+  useGetSimilarcateQuery,
+  useGetSingleEcomQuery,
+  useGetWishlistQuery,
+  useDeleteWishlistMutation
+} from "@/Features/api/EcomerceSlice";
+import { uri } from "@/Features/api/Uri";
+import { GetToken } from "@/Features/Funcslice";
 import Loader from "@/utils/Loader";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,22 +29,34 @@ import {
   View,
 } from "react-native";
 import { usePaystack } from "react-native-paystack-webview";
-import {
-  useGetSimilarcateQuery,
-  useGetSingleEcomQuery,
-} from "@/Features/api/EcomerceSlice";
-import { uri } from "@/Features/api/Uri";
-
+import { useSelector } from "react-redux";
+import { io } from "socket.io-client";
 const { width } = Dimensions.get("window");
 
 const PAYSTACK_PUBLIC_KEY = "pk_test_162884f06e28545f737d29fe112e0fd09da43cac";
 
 const YsStorePDP = () => {
   const params = useLocalSearchParams();
+  const token = useSelector(GetToken);
+  // Wishlist state
+  const [isLiked, setIsLiked] = useState(false);
+  const [wishlistId, setWishlistId] = useState(null);
+  const { data: wishlist, refetch: refetchWishlist } = useGetWishlistQuery(
+    { token },
+    {
+      pollingInterval: 10000,
+      refetchOnFocus: true,
+    },
+  );
+
+  const [addWishlist] = useCreatewishlistMutation();
+  const [deleteWishlist] = useDeleteWishlistMutation();
+  const SocketRef = React.useRef(null);
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
+  const [AddWishlist] = useCreatewishlistMutation();
+  const [addToCart] = useAddCartMutation();
 
   const [quantity, setQuantity] = useState(1);
-  const [isLiked, setIsLiked] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [expandedSection, setExpandedSection] = useState("desc");
@@ -56,13 +78,7 @@ const YsStorePDP = () => {
 
   const { popup } = usePaystack();
 
-  const {
-    data,
-    error,
-    isLoading,
-    isFetching,
-    refetch,
-  } = useGetSingleEcomQuery(
+  const { data, error, isLoading, isFetching, refetch } = useGetSingleEcomQuery(
     { id },
     {
       skip: !id,
@@ -70,10 +86,23 @@ const YsStorePDP = () => {
       refetchOnMountOrArgChange: true,
       refetchOnReconnect: true,
       refetchOnFocus: true,
-    }
+    },
   );
 
   const relatedQueryValue = data?.category || data?.name || "";
+
+  useEffect(() => {
+    if (!SocketRef.current) {
+      SocketRef.current = io(uri);
+    }
+
+    return () => {
+      if (SocketRef.current) {
+        SocketRef.current.disconnect();
+        SocketRef.current = null;
+      }
+    };
+  }, []);
 
   const {
     data: similarData,
@@ -87,20 +116,56 @@ const YsStorePDP = () => {
       refetchOnMountOrArgChange: true,
       refetchOnReconnect: true,
       refetchOnFocus: true,
-    }
+    },
   );
 
   useEffect(() => {
     const interval = setInterval(() => {
       setTimer((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
+
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     setQuantity(1);
     setActiveSlide(0);
-  }, [id]);
+  }, [id, wishlist]);
+
+  // Check if product is in wishlist
+  useEffect(() => {
+    if (wishlist && Array.isArray(wishlist)) {
+      const found = wishlist.find(
+        (item) => item?.productId?._id === id || item?.productId === id,
+      );
+      setIsLiked(!!found);
+      setWishlistId(found?._id || null);
+    }
+  }, [id, wishlist]);
+
+  // Toggle wishlist handler
+  const handleToggleWishlist = async () => {
+    if (!token || !id) return;
+    try {
+      if (isLiked && wishlistId) {
+        // Remove from wishlist
+        await deleteWishlist({ id: wishlistId, token }).unwrap();
+        setIsLiked(false);
+        setWishlistId(null);
+      } else {
+        // Add to wishlist
+        const res = await addWishlist({ productId: id, token }).unwrap();
+        setIsLiked(true);
+        setWishlistId(res?._id || null);
+      }
+      refetchWishlist();
+    } catch (err) {
+      Alert.alert(
+        "Wishlist Error",
+        err?.data?.message || "Failed to update wishlist.",
+      );
+    }
+  };
 
   const productImages = useMemo(() => {
     return Array.isArray(data?.img) ? data.img.filter(Boolean) : [];
@@ -108,9 +173,10 @@ const YsStorePDP = () => {
 
   const currentPrice = Number(data?.soldAtPrice || 0);
   const stock = Number(data?.stock || 0);
+
   const oldPrice =
     Number(data?.actualPrice || 0) > currentPrice
-      ? Number(data?.actualPrice)
+      ? Number(data?.actualPrice || 0)
       : Math.round(currentPrice * 1.2);
 
   const discountPercent =
@@ -119,7 +185,11 @@ const YsStorePDP = () => {
       : 0;
 
   const relatedProducts = useMemo(() => {
-    const list = data?.filteredByCate ;
+    const list =
+      similarData?.filteredByCate ||
+      similarData?.data ||
+      similarData?.products ||
+      [];
     if (!Array.isArray(list)) return [];
     return list.filter((p) => String(p?._id) !== String(id)).slice(0, 10);
   }, [similarData, id]);
@@ -130,6 +200,7 @@ const YsStorePDP = () => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
+
     return `${h.toString().padStart(2, "0")} : ${m
       .toString()
       .padStart(2, "0")} : ${s.toString().padStart(2, "0")}`;
@@ -175,7 +246,7 @@ const YsStorePDP = () => {
     try {
       await Share.share({
         message: `Check out this ${data?.name} on YsStore for just ₦${Number(
-          data?.soldAtPrice || 0
+          data?.soldAtPrice || 0,
         ).toLocaleString()}.\n\nView product: ${shareUrl}`,
       });
     } catch (err) {
@@ -195,6 +266,7 @@ const YsStorePDP = () => {
     }
 
     popup.checkout({
+      publicKey: PAYSTACK_PUBLIC_KEY,
       email: "customer@email.com",
       amount: totalAmount * 100,
       currency: "NGN",
@@ -206,7 +278,7 @@ const YsStorePDP = () => {
       onSuccess: (res) => {
         Alert.alert(
           "Payment Successful",
-          `Reference: ${res?.reference || "Completed"}`
+          `Reference: ${res?.reference || "Completed"}`,
         );
       },
       onCancel: () => {
@@ -215,7 +287,7 @@ const YsStorePDP = () => {
     });
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!data) return;
 
     if (stock < 1) {
@@ -223,40 +295,56 @@ const YsStorePDP = () => {
       return;
     }
 
-    Alert.alert(
-      "Added to Cart",
-      `${quantity} x ${data?.name} added to cart successfully.`
-    );
+    try {
+      const payload = {
+        productId: data?._id || id,
+        dealId: data?._id || id,
+        quantity,
+        dealPrice: data?.soldAtPrice || data?.dealPrice || 0,
+        originalPrice: data?.actualPrice || data?.originalPrice || 0,
+        name: data?.name,
+        img: Array.isArray(productImages) ? [productImages[0]] : "",
+        price: data?.soldAtPrice || data?.dealPrice || 0,
+        id: data?._id || id,
+        token,
+      };
 
-    // Replace this section with your real cart logic or mutation.
-    // Example:
-    // dispatch(addToCart({
-    //   _id: data._id,
-    //   name: data.name,
-    //   img: data.img?.[0],
-    //   soldAtPrice: data.soldAtPrice,
-    //   quantity,
-    //   companyId: data.companyId,
-    // }));
+      const adds = await addToCart(payload).unwrap();
+
+      if (SocketRef.current) {
+        SocketRef.current.emit("viewProduct", {
+          ProductName: data?.name,
+          CategoryName: data?.category,
+          companyId: data?.companyId,
+          type: "Add to cart",
+        });
+      }
+
+      console.log("Add to cart response:", productImages[0]);
+
+      Alert.alert(
+        "Added to Cart",
+        `${quantity} x ${data?.name} added to cart successfully.`,
+      );
+    } catch (err) {
+      console.log("Add to cart error:", err);
+      Alert.alert(
+        "Error",
+        err?.data?.message || "Failed to add to cart. Please try again.",
+      );
+    }
   };
 
   const handleStorePress = () => {
-    // if (data?.companyId) {
-      router.push({
-        pathname: "/(shop)/Shop",
-        params: { id: data?.companyId||data?.branchId},
-      });
-      // return;
-    // }
+    router.push({
+      pathname: "/(shop)/Shop",
+      params: { id: data?.companyId || data?.branchId },
+    });
   };
 
   const handleChatPress = () => {
-    router.push(`../chart/storecharts/2`);
     if (data?.companyId) {
-      Alert.alert(
-        "Chat",
-        "Connect this button to your vendor chat or support screen."
-      );
+      router.push(`../chart/storecharts/2`);
       return;
     }
 
@@ -264,12 +352,14 @@ const YsStorePDP = () => {
   };
 
   const toggleFollow = () => {
-    setIsFollowing((prev) => !prev);
+    const nextValue = !isFollowing;
+    setIsFollowing(nextValue);
+
     Alert.alert(
-      isFollowing ? "Unfollowed" : "Following",
-      isFollowing
-        ? "You unfollowed this store."
-        : "You are now following this store."
+      nextValue ? "Following" : "Unfollowed",
+      nextValue
+        ? "You are now following this store."
+        : "You unfollowed this store.",
     );
   };
 
@@ -330,9 +420,6 @@ const YsStorePDP = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* {(isFetching || fetchingSimilar) && <Loader />} */}
-
-        {/* IMAGE GALLERY */}
         <View style={styles.galleryContainer}>
           <ScrollView
             horizontal
@@ -376,7 +463,6 @@ const YsStorePDP = () => {
           )}
         </View>
 
-        {/* PRICE + TITLE */}
         <View style={styles.infoSection}>
           <View style={styles.priceRow}>
             <Text style={styles.currencySymbol}>₦</Text>
@@ -408,7 +494,7 @@ const YsStorePDP = () => {
 
             <TouchableOpacity
               style={{ marginLeft: "auto" }}
-              onPress={() => setIsLiked((prev) => !prev)}
+              onPress={handleToggleWishlist}
             >
               <Ionicons
                 name={isLiked ? "heart" : "heart-outline"}
@@ -418,7 +504,6 @@ const YsStorePDP = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Quantity / stock / flash */}
           <View style={styles.metaBox}>
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>Stock</Text>
@@ -471,14 +556,15 @@ const YsStorePDP = () => {
 
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>Subtotal</Text>
-              <Text style={styles.totalPrice}>₦{totalAmount.toLocaleString()}</Text>
+              <Text style={styles.totalPrice}>
+                ₦{totalAmount.toLocaleString()}
+              </Text>
             </View>
           </View>
         </View>
 
         <View style={styles.divider} />
 
-        {/* SHIPPING */}
         <View style={styles.logisticsSection}>
           <View style={styles.logisticsRow}>
             <Text style={styles.logisticsLabel}>Shipping</Text>
@@ -509,7 +595,6 @@ const YsStorePDP = () => {
 
         <View style={styles.divider} />
 
-        {/* SHOP CARD */}
         <View style={styles.shopCard}>
           <View style={styles.shopHeader}>
             <View style={styles.shopAvatar}>
@@ -539,7 +624,6 @@ const YsStorePDP = () => {
 
         <View style={styles.divider} />
 
-        {/* DESCRIPTION */}
         <Accordion
           title="Item Description"
           isOpen={expandedSection === "desc"}
@@ -573,7 +657,6 @@ const YsStorePDP = () => {
           </View>
         </Accordion>
 
-        {/* REVIEWS */}
         <Accordion
           title={`Reviews (${reviews.length})`}
           isOpen={expandedSection === "reviews"}
@@ -586,7 +669,10 @@ const YsStorePDP = () => {
 
             <View style={styles.starRatingSelector}>
               {[1, 2, 3, 4, 5].map((star) => (
-                <TouchableOpacity key={star} onPress={() => setUserRating(star)}>
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setUserRating(star)}
+                >
                   <Ionicons
                     name={star <= userRating ? "star" : "star-outline"}
                     size={28}
@@ -634,11 +720,10 @@ const YsStorePDP = () => {
           ))}
         </Accordion>
 
-        {/* RELATED PRODUCTS */}
         <View style={styles.relatedSection}>
           <Text style={styles.relatedTitle}>Related Products</Text>
 
-          {isLoading ? (
+          {loadingSimilar || fetchingSimilar ? (
             <ActivityIndicator
               size="small"
               color="#FF4747"
@@ -663,7 +748,9 @@ const YsStorePDP = () => {
                   }
                 >
                   <Image
-                    source={{ uri: `${uri}/img/${prod?.img?.[0]}` }}
+                    source={{
+                      uri: `${uri}/img/${Array.isArray(prod?.img) ? prod.img[0] : ""}`,
+                    }}
                     style={styles.relatedImg}
                   />
 
@@ -678,7 +765,10 @@ const YsStorePDP = () => {
                   <TouchableOpacity
                     style={styles.relatedCartBtn}
                     onPress={() =>
-                      Alert.alert("Added to Cart", `${prod?.name} added to cart`)
+                      Alert.alert(
+                        "Added to Cart",
+                        `${prod?.name} added to cart`,
+                      )
                     }
                   >
                     <Ionicons name="cart" size={16} color="#FFF" />
@@ -692,9 +782,11 @@ const YsStorePDP = () => {
         </View>
       </ScrollView>
 
-      {/* BOTTOM ACTION BAR */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomIconBtn} onPress={handleStorePress}>
+        <TouchableOpacity
+          style={styles.bottomIconBtn}
+          onPress={handleStorePress}
+        >
           <MaterialCommunityIcons
             name="storefront-outline"
             size={22}
@@ -703,7 +795,10 @@ const YsStorePDP = () => {
           <Text style={styles.bottomIconText}>Store</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomIconBtn} onPress={handleChatPress}>
+        <TouchableOpacity
+          style={styles.bottomIconBtn}
+          onPress={handleChatPress}
+        >
           <Ionicons name="chatbubble-ellipses-outline" size={22} color="#333" />
           <Text style={styles.bottomIconText}>Chat</Text>
         </TouchableOpacity>

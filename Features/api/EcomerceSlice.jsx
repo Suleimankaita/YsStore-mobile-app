@@ -183,6 +183,14 @@ const EcomerceSlice = apiSlice.injectEndpoints({
       }),
       providesTags: ['Buy'],
     }),
+   
+    GetWishlist: builder.query({
+      query: ({ token }) => ({
+        url: '/wish/Getwishlist',
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      providesTags: ['Buy'],
+    }),
 
     getUserById: builder.query({
       query: ({ id, token }) => ({
@@ -236,6 +244,14 @@ const EcomerceSlice = apiSlice.injectEndpoints({
         url: `/AllUsers/${id}`,
         method: 'DELETE',
         body: { confirmation },
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      invalidatesTags: [{ type: 'Buy', id: 'LIST' }],
+    }),
+    DeleteWishlist: builder.mutation({
+      query: ({ id, token, confirmation }) => ({
+        url: `/wishDelete/${id}`,
+        method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       }),
       invalidatesTags: [{ type: 'Buy', id: 'LIST' }],
@@ -366,6 +382,15 @@ const EcomerceSlice = apiSlice.injectEndpoints({
       }),
       invalidatesTags: [{ type: 'Buy', id: 'LIST' }],
     }),
+    Createwishlist: builder.mutation({
+      query: ({productId,wishlistId,token}) => ({
+        url: '/wish/Getwishlist',
+        method: 'POST',
+        body: {productId,wishlistId},
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      invalidatesTags: [{ type: 'Buy', id: 'LIST' }],
+    }),
 
     // Update user role (your existing endpoint)
     // updateUserRole: builder.mutation({
@@ -473,6 +498,9 @@ export const {
   useSupportMutation,
   useGetSimilarcateQuery,
   useSimulateAuditActivityMutation,
+  useCreatewishlistMutation,
+  useGetWishlistQuery,
+  useDeleteWishlistMutation,
 } = EcomerceSlice
 
 const select = EcomerceSlice.endpoints.GetEcomerceProduct.select()

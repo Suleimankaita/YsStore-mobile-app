@@ -11,12 +11,21 @@ import {
   StatusBar,
   ActivityIndicator,
   Platform,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { usePaystack } from 'react-native-paystack-webview';
+import { useSelector } from 'react-redux';
+import { GetToken, GetUserDetails } from '@/Features/Funcslice';
+import { uri } from '@/Features/api/Uri';
 
-const CART_STORAGE_KEY = '@ysstore_cart';
+import {
+  useCreateOrderMutation,
+  useClearCardItemMutation,
+} from '@/Features/api/EcomerceSlice';
+import { useSellProductMutation } from '@/Features/api/AdminSlice';
 
 const COLORS = {
   tomato: '#FF6347',
@@ -32,23 +41,6 @@ const COLORS = {
   dark: '#111827',
 };
 
-const FALLBACK_CART = [
-  {
-    id: '1',
-    name: 'Wireless Bluetooth Headset',
-    brand: 'YsStore HQ',
-    price: 18500,
-    qty: 1,
-  },
-  {
-    id: '2',
-    name: 'Smart Wrist Watch Pro',
-    brand: 'Fashion Hub',
-    price: 32000,
-    qty: 2,
-  },
-];
-
 const INITIAL_ADDRESSES = [
   {
     id: 'addr1',
@@ -57,14 +49,6 @@ const INITIAL_ADDRESSES = [
     phone: '+234 800 000 0000',
     addressLine: 'No 2 Kankara Road, Katsina State, Nigeria',
     isDefault: true,
-  },
-  {
-    id: 'addr2',
-    label: 'Office',
-    fullName: 'Suleiman Yusuf',
-    phone: '+234 811 111 1111',
-    addressLine: 'Custom Market Road, Abuja, Nigeria',
-    isDefault: false,
   },
 ];
 
@@ -100,12 +84,6 @@ const PAYMENT_METHODS = [
     icon: 'card-outline',
   },
   {
-    id: 'wallet',
-    title: 'Wallet',
-    subtitle: 'Pay from your YS wallet',
-    icon: 'wallet-outline',
-  },
-  {
     id: 'cash',
     title: 'Cash on Delivery',
     subtitle: 'Pay when order arrives',
@@ -115,7 +93,28 @@ const PAYMENT_METHODS = [
 
 const formatCurrency = (amount) => `₦${Number(amount || 0).toLocaleString()}`;
 
+const getImageUrl = (img) => {
+  if (!img || img === '1') {
+    return 'https://via.placeholder.com/300x300.png?text=YSStore';
+  }
+
+  if (typeof img === 'string' && img.startsWith('http')) {
+    return img;
+  }
+
+  return `${uri}/img/${img}`;
+};
+
 export default function CheckoutScreen() {
+  const params = useLocalSearchParams();
+  const { popup } = usePaystack();
+  const token = useSelector(GetToken);
+  const user = useSelector(GetUserDetails);
+
+  const [CreateOrder] = useCreateOrderMutation();
+  const [Sell] = useSellProductMutation();
+  const [ClearCardItem] = useClearCardItemMutation();
+
   const [cartItems, setCartItems] = useState([]);
   const [loadingCart, setLoadingCart] = useState(true);
   const [placingOrder, setPlacingOrder] = useState(false);
@@ -140,22 +139,28 @@ export default function CheckoutScreen() {
   useEffect(() => {
     const loadCart = async () => {
       try {
-        const stored = await AsyncStorage.getItem(CART_STORAGE_KEY);
+        if (params?.cartPayload) {
+          const parsed = JSON.parse(params.cartPayload);
+          setCartItems(Array.isArray(parsed) ? parsed : []);
+          return;
+        }
+
+        const stored = await AsyncStorage.getItem('@ysstore_cart');
         if (stored) {
           const parsed = JSON.parse(stored);
-          setCartItems(Array.isArray(parsed) ? parsed : FALLBACK_CART);
+          setCartItems(Array.isArray(parsed) ? parsed : []);
         } else {
-          setCartItems(FALLBACK_CART);
+          setCartItems([]);
         }
-      } catch (error) {
-        setCartItems(FALLBACK_CART);
+      } catch {
+        setCartItems([]);
       } finally {
         setLoadingCart(false);
       }
     };
 
     loadCart();
-  }, []);
+  }, [params?.cartPayload]);
 
   const selectedAddress = useMemo(() => {
     return addresses.find((item) => item.id === selectedAddressId) || null;
@@ -170,12 +175,18 @@ export default function CheckoutScreen() {
   }, [selectedPaymentId]);
 
   const itemCount = useMemo(() => {
-    return cartItems.reduce((sum, item) => sum + Number(item.qty || 1), 0);
+    return cartItems.reduce(
+      (sum, item) => sum + Number(item.quantity || item.qty || 1),
+      0
+    );
   }, [cartItems]);
 
   const subtotal = useMemo(() => {
     return cartItems.reduce(
-      (sum, item) => sum + Number(item.price || 0) * Number(item.qty || 1),
+      (sum, item) =>
+        sum +
+        Number(item.price || item.actualPrice || 0) *
+          Number(item.quantity || item.qty || 1),
       0
     );
   }, [cartItems]);
@@ -204,6 +215,272 @@ export default function CheckoutScreen() {
     return Math.max(0, subtotal + vat + deliveryFee - discountAmount);
   }, [subtotal, vat, deliveryFee, discountAmount]);
 
+  const userEmail =
+    user?.Email ||
+    user?.email ||
+    user?.UserProfileId?.Email ||
+    'customer@ysstoreapp.com';
+
+  const userPhone =
+    user?.phone ||
+    user?.Phone ||
+    user?.UserProfileId?.phone ||
+    selectedAddress?.phone ||
+    '';
+
+  const userName =
+    user?.Username ||
+    user?.name ||
+    selectedAddress?.fullName ||
+    'YSStore Customer';
+
+  const validateCheckout = useCallback(() => {
+    if (!cartItems.length) {
+      Alert.alert('Cart is empty', 'Add items to cart before checkout.');
+      return false;
+    }
+
+    if (!selectedAddress) {
+      Alert.alert('Address required', 'Please select a delivery address.');
+      return false;
+    }
+
+    if (!selectedDelivery) {
+      Alert.alert('Delivery method required', 'Please choose a delivery method.');
+      return false;
+    }
+
+    if (!selectedPayment) {
+      Alert.alert('Payment method required', 'Please choose a payment method.');
+      return false;
+    }
+
+    return true;
+  }, [cartItems.length, selectedAddress, selectedDelivery, selectedPayment]);
+
+  const prepareOrderPayload = useCallback(
+  (reference) => {
+    return {
+      token,
+
+      Username: user?.Username || user?.name || userName || 'Guest',
+
+      companyId:
+        cartItems?.map((item) => item?.product?.companyId || item?.companyId) || null,
+
+      ids:
+        cartItems?.map((item) => item?.product?._id || item?.productId) || null,
+
+      branchId:
+        cartItems?.map((item) => item?.product?.branchId || item?.branchId) || null,
+
+      Customer: {
+        name: selectedAddress?.fullName || userName,
+        phone: selectedAddress?.phone || userPhone || '+1234567890',
+        email: userEmail,
+        address: selectedAddress?.addressLine || 'No address provided',
+      },
+
+      items: cartItems.map((item) => ({
+        productId: item?.product?._id || item?.productId,
+        ProductName: item?.name,
+        ProductImg: Array.isArray(item?.img) ? item?.img : item?.product?.img,
+        soldAtPrice: Number(item?.price || item?.actualPrice || 0),
+        quantity: Number(item?.quantity || item?.qty || 1),
+        sku: item?.sku || item?.product?.sku || 'N/A',
+        variant: `${item?.color || ''} ${item?.size || ''}`.trim() || 'Default',
+      })),
+
+      tax: vat,
+      shippingCost: deliveryFee,
+      subtotal,
+
+      delivery: {
+        method: selectedDelivery?.title,
+        fee: selectedDelivery?.fee,
+        address: selectedAddress?.addressLine,
+      },
+
+      paymentReference: reference,
+    };
+  },
+  [
+    token,
+    user,
+    userName,
+    cartItems,
+    selectedAddress,
+    userPhone,
+    userEmail,
+    vat,
+    deliveryFee,
+    subtotal,
+    selectedDelivery,
+  ]
+);
+const completeOrderAfterPayment = useCallback(
+  async (paymentReference) => {
+    try {
+      const payload = prepareOrderPayload(paymentReference);
+
+      console.log('CreateOrder payload:', payload);
+
+      await CreateOrder(payload).unwrap();
+
+      for (const item of cartItems) {
+        await Sell({
+          sellerId: item?.product?.companyId,
+          actorId: user?.id || user?._id,
+          productId: item?.product?._id || item?.productId,
+          quantity: Number(item?.quantity || item?.qty || 1),
+          companyId: item?.product?.companyId,
+          branchId: item?.product?.branchId,
+          soldAtPrice: Number(item?.price || item?.actualPrice || 0),
+          actualPrice: Number(item?.originalPrice || item?.actualPrice || 0),
+          TransactionType: 'sale',
+          paymentMethod: 'paystack',
+          paymentReference,
+          img: item?.img,
+          name: item?.name,
+          sku: item?.sku || item?.product?.sku || 'N/A',
+          token,
+        });
+      }
+
+      await ClearCardItem({
+        id: user?.id || user?._id,
+        token,
+      });
+
+      await AsyncStorage.setItem('@ysstore_last_order', JSON.stringify(payload));
+
+      router.push({
+        pathname: '/order-success',
+        params: {
+          orderId: paymentReference,
+          total: String(total),
+          payment: selectedPayment?.title || selectedPaymentId,
+        },
+      });
+    } catch (err) {
+      console.log('Checkout failed:', err);
+
+      Alert.alert(
+        'Checkout failed',
+        err?.data?.message || err?.message || 'Something went wrong'
+      );
+    }
+  },
+  [
+    prepareOrderPayload,
+    CreateOrder,
+    Sell,
+    ClearCardItem,
+    cartItems,
+    user,
+    token,
+    total,
+    selectedPayment,
+    selectedPaymentId,
+  ]
+);
+  const startPaystackPayment = useCallback(() => {
+    if (!validateCheckout()) return;
+
+    setPlacingOrder(true);
+
+    popup.checkout({
+      email: userEmail,
+      amount: Number(total),
+      currency: 'NGN',
+
+      metadata: {
+        custom_fields: [
+          {
+            display_name: 'Customer Name',
+            variable_name: 'customer_name',
+            value: userName,
+          },
+          {
+            display_name: 'Phone',
+            variable_name: 'phone',
+            value: userPhone,
+          },
+        ],
+      },
+
+      onSuccess: async (response) => {
+        try {
+          const reference =
+            response?.reference ||
+            `PS_${Date.now()}`;
+            alert(reference)
+
+          await completeOrderAfterPayment(reference, 'paid');
+
+          Alert.alert('Payment successful', `Reference: ${reference}`);
+        } catch (error) {
+          Alert.alert(
+            'Payment received but order failed',
+            error?.data?.message ||
+              error?.message ||
+              'Please contact support with your payment reference.'
+          );
+        } finally {
+          setPlacingOrder(false);
+        }
+      },
+
+      onCancel: () => {
+        setPlacingOrder(false);
+        Alert.alert('Payment cancelled', 'You cancelled the Paystack payment.');
+      },
+
+      onError: (error) => {
+        setPlacingOrder(false);
+        Alert.alert(
+          'Payment error',
+          error?.message || 'Unable to start Paystack payment.'
+        );
+      },
+    });
+  }, [
+    validateCheckout,
+    popup,
+    userEmail,
+    total,
+    userName,
+    userPhone,
+    completeOrderAfterPayment,
+  ]);
+
+  const handleCashOrder = useCallback(async () => {
+    if (!validateCheckout()) return;
+
+    setPlacingOrder(true);
+
+    try {
+      const reference = `COD_${Date.now()}`;
+      await completeOrderAfterPayment(reference, 'pending');
+    } catch (error) {
+      Alert.alert(
+        'Order failed',
+        error?.data?.message || error?.message || 'Unable to place order.'
+      );
+    } finally {
+      setPlacingOrder(false);
+    }
+  }, [validateCheckout, completeOrderAfterPayment]);
+
+  const handlePlaceOrder = useCallback(() => {
+    if (selectedPaymentId === 'paystack') {
+      startPaystackPayment();
+      return;
+    }
+
+    handleCashOrder();
+  }, [selectedPaymentId, startPaystackPayment, handleCashOrder]);
+
   const applyCoupon = useCallback(() => {
     const code = coupon.trim().toUpperCase();
 
@@ -213,31 +490,19 @@ export default function CheckoutScreen() {
     }
 
     if (code === 'YS10') {
-      setAppliedCoupon({
-        code,
-        type: 'percentage',
-        value: 10,
-      });
+      setAppliedCoupon({ code, type: 'percentage', value: 10 });
       Alert.alert('Coupon applied', '10% discount has been applied.');
       return;
     }
 
     if (code === 'SAVE5000') {
-      setAppliedCoupon({
-        code,
-        type: 'fixed',
-        value: 5000,
-      });
+      setAppliedCoupon({ code, type: 'fixed', value: 5000 });
       Alert.alert('Coupon applied', '₦5,000 discount has been applied.');
       return;
     }
 
     if (code === 'FREESHIP') {
-      setAppliedCoupon({
-        code,
-        type: 'fixed',
-        value: deliveryFee,
-      });
+      setAppliedCoupon({ code, type: 'fixed', value: deliveryFee });
       Alert.alert('Coupon applied', 'Delivery discount has been applied.');
       return;
     }
@@ -279,93 +544,7 @@ export default function CheckoutScreen() {
       addressLine: '',
     });
     setShowAddAddressForm(false);
-
-    Alert.alert('Address added', 'Your new address has been added.');
   }, [newAddress]);
-
-  const validateCheckout = useCallback(() => {
-    if (!cartItems.length) {
-      Alert.alert('Cart is empty', 'Add items to cart before checkout.');
-      return false;
-    }
-
-    if (!selectedAddress) {
-      Alert.alert('Address required', 'Please select a delivery address.');
-      return false;
-    }
-
-    if (!selectedDelivery) {
-      Alert.alert('Delivery method required', 'Please choose a delivery method.');
-      return false;
-    }
-
-    if (!selectedPayment) {
-      Alert.alert('Payment method required', 'Please choose a payment method.');
-      return false;
-    }
-
-    return true;
-  }, [cartItems.length, selectedAddress, selectedDelivery, selectedPayment]);
-
-  const handlePlaceOrder = useCallback(async () => {
-    if (!validateCheckout()) return;
-
-    setPlacingOrder(true);
-
-    try {
-      const orderPayload = {
-        orderId: `YS-${Date.now()}`,
-        items: cartItems,
-        itemCount,
-        address: selectedAddress,
-        delivery: selectedDelivery,
-        payment: selectedPayment,
-        coupon: appliedCoupon,
-        orderNote,
-        subtotal,
-        vat,
-        deliveryFee,
-        discountAmount,
-        total,
-        createdAt: new Date().toISOString(),
-        status: selectedPaymentId === 'cash' ? 'Pending Confirmation' : 'Paid',
-      };
-
-      await AsyncStorage.setItem('@ysstore_last_order', JSON.stringify(orderPayload));
-
-      if (selectedPaymentId !== 'cash') {
-        await AsyncStorage.removeItem(CART_STORAGE_KEY).catch(() => {});
-      }
-
-      router.push({
-        pathname: '/order-success',
-        params: {
-          orderId: orderPayload.orderId,
-          total: String(orderPayload.total),
-          payment: selectedPayment.title,
-        },
-      });
-    } catch (error) {
-      Alert.alert('Order failed', error?.message || 'Unable to place order.');
-    } finally {
-      setPlacingOrder(false);
-    }
-  }, [
-    validateCheckout,
-    cartItems,
-    itemCount,
-    selectedAddress,
-    selectedDelivery,
-    selectedPayment,
-    appliedCoupon,
-    orderNote,
-    subtotal,
-    vat,
-    deliveryFee,
-    discountAmount,
-    total,
-    selectedPaymentId,
-  ]);
 
   if (loadingCart) {
     return (
@@ -388,7 +567,9 @@ export default function CheckoutScreen() {
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Checkout</Text>
-          <Text style={styles.headerSub}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
+          <Text style={styles.headerSub}>
+            {itemCount} item{itemCount !== 1 ? 's' : ''}
+          </Text>
         </View>
 
         <View style={styles.headerBtn} />
@@ -438,7 +619,7 @@ export default function CheckoutScreen() {
           {showAddAddressForm && (
             <View style={styles.addAddressBox}>
               <TextInput
-                placeholder="Label (Home, Office...)"
+                placeholder="Label"
                 placeholderTextColor={COLORS.textMuted}
                 value={newAddress.label}
                 onChangeText={(text) =>
@@ -446,6 +627,7 @@ export default function CheckoutScreen() {
                 }
                 style={styles.input}
               />
+
               <TextInput
                 placeholder="Full name"
                 placeholderTextColor={COLORS.textMuted}
@@ -455,6 +637,7 @@ export default function CheckoutScreen() {
                 }
                 style={styles.input}
               />
+
               <TextInput
                 placeholder="Phone number"
                 placeholderTextColor={COLORS.textMuted}
@@ -463,7 +646,9 @@ export default function CheckoutScreen() {
                   setNewAddress((prev) => ({ ...prev, phone: text }))
                 }
                 style={styles.input}
+                keyboardType="phone-pad"
               />
+
               <TextInput
                 placeholder="Full address"
                 placeholderTextColor={COLORS.textMuted}
@@ -506,17 +691,7 @@ export default function CheckoutScreen() {
                   </View>
                 </View>
 
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.methodFee}>{formatCurrency(method.fee)}</Text>
-                  {active && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color={COLORS.tomato}
-                      style={{ marginTop: 6 }}
-                    />
-                  )}
-                </View>
+                <Text style={styles.methodFee}>{formatCurrency(method.fee)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -607,19 +782,26 @@ export default function CheckoutScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Items Preview</Text>
 
-          {cartItems.map((item) => (
-            <View key={item.id} style={styles.itemRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemBrand}>{item.brand}</Text>
-                <Text style={styles.itemQty}>Qty: {item.qty}</Text>
-              </View>
+          {cartItems.map((item) => {
+            const quantity = Number(item.quantity || item.qty || 1);
+            const price = Number(item.price || item.actualPrice || 0);
 
-              <Text style={styles.itemPrice}>
-                {formatCurrency(Number(item.price || 0) * Number(item.qty || 1))}
-              </Text>
-            </View>
-          ))}
+            return (
+              <View key={item.cartId || item.id || item.productId} style={styles.itemRow}>
+                <Image source={{ uri: getImageUrl(item.img) }} style={styles.previewImage} />
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.itemName} numberOfLines={2}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.itemBrand}>{item.brand || 'YS Store'}</Text>
+                  <Text style={styles.itemQty}>Qty: {quantity}</Text>
+                </View>
+
+                <Text style={styles.itemPrice}>{formatCurrency(price * quantity)}</Text>
+              </View>
+            );
+          })}
         </View>
 
         <View style={styles.sectionCard}>
@@ -642,9 +824,7 @@ export default function CheckoutScreen() {
 
           {discountAmount > 0 && (
             <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: COLORS.success }]}>
-                Discount
-              </Text>
+              <Text style={[styles.summaryLabel, { color: COLORS.success }]}>Discount</Text>
               <Text style={[styles.summaryValue, { color: COLORS.success }]}>
                 -{formatCurrency(discountAmount)}
               </Text>
@@ -676,8 +856,14 @@ export default function CheckoutScreen() {
             <ActivityIndicator color={COLORS.white} />
           ) : (
             <>
-              <Ionicons name="lock-closed" size={18} color={COLORS.white} />
-              <Text style={styles.placeOrderText}>Place Order</Text>
+              <Ionicons
+                name={selectedPaymentId === 'paystack' ? 'card' : 'cash'}
+                size={18}
+                color={COLORS.white}
+              />
+              <Text style={styles.placeOrderText}>
+                {selectedPaymentId === 'paystack' ? 'Pay with Paystack' : 'Place Order'}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -698,12 +884,10 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontWeight: '700',
   },
-
   container: {
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -737,12 +921,10 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontWeight: '700',
   },
-
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 140,
+    paddingBottom: 150,
   },
-
   sectionCard: {
     backgroundColor: COLORS.white,
     borderRadius: 22,
@@ -768,7 +950,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 13,
   },
-
   optionCard: {
     backgroundColor: COLORS.bg,
     borderRadius: 16,
@@ -816,7 +997,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-
   addAddressBox: {
     marginTop: 8,
     backgroundColor: COLORS.bg,
@@ -825,7 +1005,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-
   input: {
     height: 50,
     borderRadius: 14,
@@ -842,7 +1021,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     textAlignVertical: 'top',
   },
-
   primaryMiniBtn: {
     height: 46,
     borderRadius: 14,
@@ -856,7 +1034,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
   },
-
   methodCard: {
     backgroundColor: COLORS.bg,
     borderRadius: 16,
@@ -900,7 +1077,6 @@ const styles = StyleSheet.create({
     color: COLORS.textDark,
     fontWeight: '800',
   },
-
   couponRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -944,14 +1120,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-
   itemRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    gap: 12,
+  },
+  previewImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: COLORS.bg,
   },
   itemName: {
     fontSize: 14,
@@ -974,9 +1155,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: COLORS.textDark,
-    marginLeft: 12,
+    marginLeft: 8,
   },
-
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1007,7 +1187,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: COLORS.tomato,
   },
-
   bottomBar: {
     position: 'absolute',
     left: 0,

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    
+    <script>
+        function sigmoid(x) {
+  return 1 / (1 + Math.exp(-x));
+}
+
+let weight = Math.random();
+let bias = Math.random();
+let learningRate = 0.1;
+
+// training data: input -> expected output
+const data = [
+  { x: 0, y: 0 },
+  { x: 1, y: 1 },
+];
+
+for (let epoch = 0; epoch < 1000; epoch++) {
+  for (const item of data) {
+    // forward pass
+    const prediction = sigmoid(item.x * weight + bias);
+
+    // error
+    const error = prediction - item.y;
+
+    // update weight and bias
+    weight -= learningRate * error * item.x;
+    bias -= learningRate * error;
+  }
+}
+
+
+console.log("weight:", weight);
+console.log("bias:", bias);
+
+console.log("Predict 0:", sigmoid(0 * weight + bias));
+console.log("Predict 1:", sigmoid(1 * weight + bias));
+    </script>
+
+</body>
+</html>

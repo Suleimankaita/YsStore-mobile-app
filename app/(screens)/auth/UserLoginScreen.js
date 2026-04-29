@@ -25,7 +25,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-
+import { setToken } from "@/Features/Funcslice";
+import { useDispatch } from "react-redux";
 const SKY = "skyblue";
 const TOMATO = "tomato";
 
@@ -175,6 +176,7 @@ const UserLoginScreen = ({ navigation }) => {
       animateStep(-1, () => setStep((prev) => prev - 1));
     }
   };
+  const dispatch = useDispatch();
 
   const handleLogin = async () => {
     try {
@@ -190,6 +192,8 @@ const UserLoginScreen = ({ navigation }) => {
           "credentials",
           JSON.stringify( logins?.accessToken ),
         );
+
+        dispatch(setToken(logins?.accessToken));  
         console.log("Login successful:", logins);
       }
     } catch (error) {

@@ -186,7 +186,7 @@ export default function YSStoreProApp() {
     if (!result.canceled) {
       setSearchImageUri(result.assets[0].uri);
       // TODO: Handle image upload to your backend here
-      console.log("Searching with image:", result.assets[0].uri);
+      // console.log("Searching with image:", result.assets[0].uri);
     }
   };
 
@@ -245,7 +245,7 @@ export default function YSStoreProApp() {
   const renderProduct = ({ item }) => {
     const random = Math.floor(Math.random() * 5) + 1;
     const imageUrl = item?.img && item?.img[0] ? `${uri}/img/${item?.img[0]}` : item.image;
-    // console.log("Rendering product:", item);
+    // console.log("Rendering product:", item?.rate);
     return (
       <TouchableOpacity style={styles.gridProductCard} onPress={() => {
               dispatch(SetRouter(item?.name));
@@ -267,10 +267,10 @@ export default function YSStoreProApp() {
 
           <View style={styles.cardFooter}>
             <View style={styles.ratingRow}>
-              {Array.from({length: random}).map((_, i) => (
+              {Array.from({length: Number(item?.rate)}).map((_, i) => (
                 <Ionicons key={i} name="star" size={12} color="#F59E0B" />
               ))}
-              <Text style={styles.ratingText}>{item?.rating || random}</Text>
+              <Text style={styles.ratingText}>{item?.rate}</Text>
             </View>
             <TouchableOpacity style={styles.gridAddBtn}>
               <Ionicons name="add" size={18} color="white" />

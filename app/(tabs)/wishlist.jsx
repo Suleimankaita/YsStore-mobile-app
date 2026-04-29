@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 import SaveItem from "@/utils/SaveItem";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useGetSimilarcateQuery } from "@/Features/api/EcomerceSlice";
 import { router } from "expo-router";
 import Animated, {
   FadeInDown,
@@ -26,6 +27,10 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { Swipeable } from "react-native-gesture-handler";
+import { useGetWishlistQuery, useDeleteWishlistMutation } from "@/Features/api/EcomerceSlice";
+import { useSelector } from "react-redux";
+import { GetToken } from "@/Features/Funcslice";
+import { uri } from "@/Features/api/Uri";
 
 const { width } = Dimensions.get("window");
 
@@ -104,11 +109,11 @@ const WishlistItem = ({ item, index, onRemove, onAddToCart, onOpen }) => {
     scale.value = withSpring(1, { damping: 14, stiffness: 180 });
   };
 
-  const discount = Math.round(((item.oldPrice - item.price) / item.oldPrice) * 100);
+  const discount = Math.round(((item?.actualPrice - item?.SoldPrice) / item?.actualPrice) * 100);
 
   const renderRightActions = () => (
     <Animated.View entering={SlideInRight.duration(250)} style={styles.swipeActions}>
-      <TouchableOpacity style={styles.swipeDeleteBtn} onPress={() => onRemove(item.id)}>
+      <TouchableOpacity style={styles.swipeDeleteBtn} onPress={() => onRemove(item?._id)}>
         <Ionicons name="trash-outline" size={22} color={COLORS.white} />
         <Text style={styles.swipeDeleteText}>Delete</Text>
       </TouchableOpacity>
@@ -130,7 +135,7 @@ const WishlistItem = ({ item, index, onRemove, onAddToCart, onOpen }) => {
           style={styles.card}
         >
           <View style={styles.imageWrap}>
-            <Image source={{ uri: item.image }} style={styles.image} />
+            <Image source={{ uri: `${uri}/img/${item?.img}` }} style={styles.image} />
             <LinearGradient
               colors={["transparent", "rgba(0,0,0,0.08)"]}
               style={styles.imageOverlay}
@@ -143,9 +148,9 @@ const WishlistItem = ({ item, index, onRemove, onAddToCart, onOpen }) => {
           <View style={styles.cardContent}>
             <View style={styles.topRow}>
               <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>{item.category}</Text>
+                <Text style={styles.categoryBadgeText}>{item?.productId?.categoryName}</Text>
               </View>
-              <TouchableOpacity onPress={() => onRemove(item.id)} style={styles.heartBtn}>
+              <TouchableOpacity onPress={() => onRemove(item?._id)} style={styles.heartBtn}>
                 <Ionicons name="heart" size={18} color={COLORS.tomato} />
               </TouchableOpacity>
             </View>
@@ -158,17 +163,17 @@ const WishlistItem = ({ item, index, onRemove, onAddToCart, onOpen }) => {
               <Ionicons name="star" size={13} color={COLORS.tomato} />
               <Text style={styles.ratingText}>{item.rating}</Text>
               <Text style={styles.stockText}>
-                • {item.stock > 0 ? `${item.stock} in stock` : "Out of stock"}
+                • {item?.productId?.quantity > 0 ? `${item?.productId?.quantity} in stock` : "Out of stock"}
               </Text>
             </View>
 
             <View style={styles.priceRow}>
-              <Text style={styles.price}>₦{item.price.toLocaleString()}</Text>
-              <Text style={styles.oldPrice}>₦{item.oldPrice.toLocaleString()}</Text>
+              <Text style={styles.price}>₦{item?.SoldPrice?.toLocaleString()}</Text>
+              <Text style={styles.oldPrice}>₦{item?.actualPrice?.toLocaleString()}</Text>
             </View>
 
             <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.removeBtn} onPress={() => onRemove(item.id)}>
+              <TouchableOpacity style={styles.removeBtn} onPress={() => onRemove(item?._id)}>
                 <Ionicons name="trash-outline" size={16} color={COLORS.tomato} />
                 <Text style={styles.removeBtnText}>Remove</Text>
               </TouchableOpacity>
@@ -176,11 +181,11 @@ const WishlistItem = ({ item, index, onRemove, onAddToCart, onOpen }) => {
               <TouchableOpacity
                 style={styles.cartBtn}
                 onPress={() => onAddToCart(item)}
-                disabled={item.stock < 1}
+                disabled={item?.productId?.quantity < 1}
               >
                 <Ionicons name="cart-outline" size={17} color={COLORS.white} />
                 <Text style={styles.cartBtnText}>
-                  {item.stock < 1 ? "Unavailable" : "Add to Cart"}
+                  {item?.productId?.quantity < 1 ? "Unavailable" : "Add to Cart"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -192,8 +197,19 @@ const WishlistItem = ({ item, index, onRemove, onAddToCart, onOpen }) => {
 };
 
 const WishlistPage = () => {
-  const [wishlist, setWishlist] = useState(initialWishlist);
+  const token=useSelector(GetToken);
+  const { data:wishlistData } = useGetWishlistQuery({ token },{
+    pollingInterval: 10000, // Poll every 30 seconds
+    refetchOnMountOrArgChange: true, // Refetch when component mounts or args change
+
+  });
+  const [DeleteWishlist,{isLoading: isDeleting}] = useDeleteWishlistMutation();
+  useEffect(()=>{
+    if(!wishlistData)return ;
+    setWishlist(wishlistData);
+  },[wishlistData])
   const [search, setSearch] = useState("");
+  const [wishlist, setWishlist] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState("All");
   const [cartCount, setCartCount] = useState(0);
 
@@ -203,7 +219,7 @@ const WishlistPage = () => {
     let list = [...wishlist];
 
     if (selectedFilter !== "All") {
-      list = list.filter((item) => item.category === selectedFilter);
+      list = list.filter((item) => item?.productId?.categoryName === selectedFilter);
     }
 
     if (search.trim()) {
@@ -211,7 +227,7 @@ const WishlistPage = () => {
       list = list.filter(
         (item) =>
           item.name.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q)
+          item?.productId?.categoryName.toLowerCase().includes(q)
       );
     }
 
@@ -219,12 +235,17 @@ const WishlistPage = () => {
   }, [wishlist, search, selectedFilter]);
 
   const totalValue = useMemo(() => {
-    return wishlist.reduce((sum, item) => sum + item.price, 0);
+    return wishlist.reduce((sum, item) => sum + item?.SoldPrice, 0);
   }, [wishlist]);
 
-  const removeItem = (id) => {
-    setWishlist((prev) => prev.filter((item) => item.id !== id));
-  };
+  const removeItem = async(id) => {
+    try{
+      const ms=await DeleteWishlist({id,token,confirmation:true}).unwrap();
+      setWishlist((prev) => prev.filter((item) => item?._id !== id));
+    }catch(err){
+      alert(err?.data?.message || "Failed to remove item from wishlist.");
+    }
+    };
 
   const addToCart = (item) => {
     // if (item.stock < 1) {
@@ -239,7 +260,7 @@ const WishlistPage = () => {
   const openProduct = (item) => {
     router.push({
       pathname: "/app/(PDP)/[id]",
-      params: { id: item.id },
+      params: { id: item?._id },
     });
   };
 
@@ -249,7 +270,7 @@ const WishlistPage = () => {
   };
 
   const moveAllToCart = () => {
-    const availableItems = wishlist.filter((item) => item.stock > 0);
+    const availableItems = wishlist.filter((item) => Number(item?.productId?.quantity) > 0);
     if (!availableItems.length) {
       Alert.alert("No Available Items", "There are no available wishlist items to add.");
       return;
@@ -295,7 +316,7 @@ const WishlistPage = () => {
             </View>
             <View>
               <Text style={styles.summaryLabel}>Saved Value</Text>
-              <Text style={styles.summaryValue}>₦{totalValue.toLocaleString()}</Text>
+              <Text style={styles.summaryValue}>₦{totalValue?.toLocaleString()}</Text>
             </View>
           </View>
 
@@ -371,7 +392,7 @@ const WishlistPage = () => {
         ) : (
           <Animated.FlatList
             data={filteredWishlist}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item?._id}
             showsVerticalScrollIndicator={false}
             style={{flex:1}}
             contentContainerStyle={styles.listContent}
