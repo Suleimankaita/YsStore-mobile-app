@@ -10,12 +10,20 @@ import { GetRouter } from "@/Features/Funcslice";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import PersistLogin from "@/Features/api/Persistence";
 import Auth from "@/utils/Auth";
+import { useEffect } from "react";
 
 export const unstable_settings = {};
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const route = useSelector(GetRouter);
+  const name="suleiman"
+  useEffect(()=>{
+
+    // alert(name.charAt(0).toUpperCase()+name.slice(1,name.length))
+    // alert(name.slice(0,1).toUpperCase())
+    
+  },[])
   Auth()
   return (
     <GestureHandlerRootView
@@ -29,7 +37,7 @@ export default function RootLayout() {
           <PersistLogin>
             {/* <Auth /> */}
             <Stack>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false,title:'Home' }} />
               <Stack.Screen
                 name="(Order-tracking)/[id]"
                 options={{ headerShown: false, title: "Cart" }}
@@ -37,6 +45,26 @@ export default function RootLayout() {
               <Stack.Screen
                 name="(Cart)/Cart"
                 options={{ headerShown: false, title: "Cart" }}
+              />
+              <Stack.Screen
+                name="(Orders)"
+                options={{ headerShown: false, title: "Order" }}
+              />
+              <Stack.Screen
+                name="(HelpCenter)"
+                options={{ headerShown: false, title: "HelpCenter" }}
+              />
+              <Stack.Screen
+                name="(Wallet)"
+                options={{ headerShown: false, title: "Wallet" }}
+              />
+              <Stack.Screen
+                name="(Security)"
+                options={{ headerShown: false, title: "Security" }}
+              />
+              <Stack.Screen
+                name="(Topay)"
+                options={{ headerShown: true, title: `${route?.charAt(0)?.toUpperCase()+route?.slice(1,route?.length)}` }}
               />
               <Stack.Screen name="(screens)" options={{ headerShown: false }} />
               <Stack.Screen name="(Checkout)" options={{ headerShown: false }} />

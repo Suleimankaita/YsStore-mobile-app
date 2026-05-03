@@ -1,6 +1,6 @@
 import { useGetUserByIdQuery } from "@/Features/api/EcomerceSlice";
 import { uri } from "@/Features/api/Uri";
-import { GetUserDetails } from "@/Features/Funcslice";
+import { GetUserDetails, SetRouter } from "@/Features/Funcslice";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -20,7 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 
 const { width, height } = Dimensions.get("window");
 
@@ -321,6 +321,7 @@ export default function PremiumMenuScreen({ navigation }) {
   const goToRegister = () => {
     navigation?.navigate?.("Register");
   };
+  const dispatch=useDispatch()
 
   const handleProtectedAction = (screenName) => {
     if (!isAuthenticated) {
@@ -329,8 +330,9 @@ export default function PremiumMenuScreen({ navigation }) {
     }
     alert(screenName);
     if (screenName) {
+      dispatch(SetRouter(screenName))
       router.push({
-        pathname: "/ToPay",
+        pathname: `(Topay)/${screenName}`,
         params: { screenName },
       });
       // navigation?.navigate?.(screenName);
@@ -701,7 +703,7 @@ export default function PremiumMenuScreen({ navigation }) {
                     label="Wallet"
                     color={theme.primary}
                     theme={theme}
-                    onPress={() => handleProtectedAction("Wallet")}
+                    onPress={() => router.push("(Wallet)/Wallet")}
                   />
                   <ToolItem
                     icon="ticket-outline"
@@ -729,7 +731,7 @@ export default function PremiumMenuScreen({ navigation }) {
                     label="Address"
                     color={theme.secondary}
                     theme={theme}
-                    onPress={() => handleProtectedAction("Address")}
+                    onPress={() => router.push("(Address)/delivery")}
                   />
                   <ToolItem
                     icon="time-outline"
@@ -746,11 +748,18 @@ export default function PremiumMenuScreen({ navigation }) {
                     onPress={() => handleProtectedAction("Cards")}
                   />
                   <ToolItem
+                    icon="card-outline"
+                    label="Orders"
+                    color={theme.orange}
+                    theme={theme}
+                    onPress={() => router.push("(Orders)/OrderPgae")}
+                  />
+                  <ToolItem
                     icon="shield-checkmark-outline"
                     label="Security"
                     color={theme.green}
                     theme={theme}
-                    onPress={() => handleProtectedAction("Security")}
+                    onPress={() => router.push("(Security)/Security")}
                   />
                 </View>
               </View>
@@ -869,7 +878,7 @@ export default function PremiumMenuScreen({ navigation }) {
             extra="Buyer protection and support"
             color={theme.primary}
             theme={theme}
-            onPress={() => navigation?.navigate?.("HelpCenter")}
+            onPress={() => router.push("(HelpCenter)/HelpCenter")}
           />
           <RowItem
             icon="settings-outline"
